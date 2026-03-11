@@ -39,7 +39,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <DashboardLayout activeTab="settings">
+    <DashboardLayout>
       <div className="space-y-6">
         {/* Header */}
         <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800">

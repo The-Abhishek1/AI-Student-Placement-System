@@ -127,7 +127,7 @@ export default function AIMatchingPage() {
   }, [autoMatch]);
 
   return (
-    <DashboardLayout activeTab="ai-matching">
+    <DashboardLayout>
       <div className="space-y-6">
         {/* Header */}
         <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800">

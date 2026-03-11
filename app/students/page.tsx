@@ -64,7 +64,7 @@ export default function StudentsPage() {
   const departments = [...new Set(students.map(s => s.department))];
 
   return (
-    <DashboardLayout activeTab="students">
+    <DashboardLayout>
       <div className="space-y-6">
         {/* Header */}
         <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800">

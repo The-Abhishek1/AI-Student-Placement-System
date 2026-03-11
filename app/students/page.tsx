@@ -3,76 +3,160 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import DashboardLayout from '../components/DashboardLayout';
-import {
-  BriefcaseIcon,
-  BuildingOfficeIcon,
-  MapPinIcon,
-  CurrencyDollarIcon,
-  ClockIcon,
-  ArrowPathIcon,
-  BookmarkIcon,
+import { 
+  UserPlusIcon, 
   MagnifyingGlassIcon,
-  FunnelIcon
+  FunnelIcon,
+  ArrowDownTrayIcon,
+  PencilIcon,
+  TrashIcon,
+  AcademicCapIcon,
+  BriefcaseIcon,
+  ChartBarIcon,
+  CheckCircleIcon,
+  XCircleIcon
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
 
-interface Job {
+interface Student {
   id: string;
-  title: string;
-  company: string;
-  location: string;
-  salary: {
-    min: number;
-    max: number;
-    currency: string;
-  };
-  type: string;
-  postedDate: string;
-  skills: string[];
-  description: string;
-  source: string;
-  matchCount?: number;
+  name: string;
+  email: string;
+  department: string;
+  graduationYear: number;
+  skills: Array<{ name: string; level: string }>;
+  matchScore: number;
+  status: 'active' | 'placed' | 'training';
+  avatar?: string;
 }
 
-export default function JobsPage() {
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [loading, setLoading] = useState(false);
+export default function StudentsPage() {
+  const [students, setStudents] = useState<Student[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedType, setSelectedType] = useState('all');
-  const [refreshing, setRefreshing] = useState(false);
+  const [selectedDepartment, setSelectedDepartment] = useState('all');
+  const [selectedStatus, setSelectedStatus] = useState('all');
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
 
-  const fetchJobs = async (refresh = false) => {
+  useEffect(() => {
+    fetchStudents();
+  }, []);
+
+  const fetchStudents = async () => {
     try {
-      if (refresh) setRefreshing(true);
-      else setLoading(true);
+      setLoading(true);
+      // Mock data - replace with actual API call
+      const mockStudents: Student[] = [
+        {
+          id: '1',
+          name: 'Sarah Chen',
+          email: 'sarah.chen@example.com',
+          department: 'Computer Science',
+          graduationYear: 2024,
+          skills: [
+            { name: 'Python', level: 'advanced' },
+            { name: 'React', level: 'intermediate' },
+            { name: 'Machine Learning', level: 'intermediate' }
+          ],
+          matchScore: 98,
+          status: 'active'
+        },
+        {
+          id: '2',
+          name: 'Alex Kumar',
+          email: 'alex.kumar@example.com',
+          department: 'Data Science',
+          graduationYear: 2024,
+          skills: [
+            { name: 'Python', level: 'advanced' },
+            { name: 'SQL', level: 'advanced' },
+            { name: 'TensorFlow', level: 'intermediate' }
+          ],
+          matchScore: 94,
+          status: 'active'
+        },
+        {
+          id: '3',
+          name: 'Maria Garcia',
+          email: 'maria.garcia@example.com',
+          department: 'Cybersecurity',
+          graduationYear: 2025,
+          skills: [
+            { name: 'Network Security', level: 'advanced' },
+            { name: 'Python', level: 'intermediate' },
+            { name: 'Ethical Hacking', level: 'intermediate' }
+          ],
+          matchScore: 82,
+          status: 'training'
+        },
+        {
+          id: '4',
+          name: 'James Wilson',
+          email: 'james.wilson@example.com',
+          department: 'Computer Science',
+          graduationYear: 2024,
+          skills: [
+            { name: 'Java', level: 'advanced' },
+            { name: 'Spring Boot', level: 'intermediate' },
+            { name: 'AWS', level: 'beginner' }
+          ],
+          matchScore: 76,
+          status: 'training'
+        },
+        {
+          id: '5',
+          name: 'Priya Patel',
+          email: 'priya.patel@example.com',
+          department: 'Data Science',
+          graduationYear: 2023,
+          skills: [
+            { name: 'Python', level: 'advanced' },
+            { name: 'R', level: 'advanced' },
+            { name: 'Statistics', level: 'expert' }
+          ],
+          matchScore: 95,
+          status: 'placed'
+        }
+      ];
       
-      const res = await fetch(`/api/jobs?keywords=software,data,ai&location=remote`);
-      const data = await res.json();
-      setJobs(data.jobs || []);
-      
-      if (refresh) toast.success('Jobs refreshed successfully');
+      setStudents(mockStudents);
     } catch (error) {
-      console.error('Fetch jobs error:', error);
-      toast.error('Failed to load jobs');
+      console.error('Fetch students error:', error);
+      toast.error('Failed to load students');
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   };
 
-  useEffect(() => {
-    fetchJobs();
-  }, []);
-
-  const filteredJobs = jobs.filter(job => {
-    const matchesSearch = job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         job.company.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesType = selectedType === 'all' || job.type === selectedType;
-    return matchesSearch && matchesType;
+  // Fix: Properly filter students
+  const filteredStudents = students.filter(student => {
+    const matchesSearch = student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         student.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         student.department.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesDept = selectedDepartment === 'all' || student.department === selectedDepartment;
+    const matchesStatus = selectedStatus === 'all' || student.status === selectedStatus;
+    return matchesSearch && matchesDept && matchesStatus;
   });
 
-  // Fix: Convert Set to Array properly for TypeScript
-  const jobTypes = ['all', ...Array.from(new Set(jobs.map(j => j.type)))];
+  // Fix: Get unique departments using Array.from instead of spread with Set
+  const departments = ['all', ...Array.from(new Set(students.map(s => s.department)))];
+
+  const getStatusColor = (status: string) => {
+    switch(status) {
+      case 'active': return 'bg-green-900/50 text-green-400';
+      case 'placed': return 'bg-blue-900/50 text-blue-400';
+      case 'training': return 'bg-yellow-900/50 text-yellow-400';
+      default: return 'bg-gray-900/50 text-gray-400';
+    }
+  };
+
+  const getScoreColor = (score: number) => {
+    if (score >= 90) return 'text-green-400';
+    if (score >= 80) return 'text-yellow-400';
+    if (score >= 70) return 'text-orange-400';
+    return 'text-red-400';
+  };
 
   return (
     <DashboardLayout>
@@ -81,16 +165,15 @@ export default function JobsPage() {
         <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-white">Job Listings</h1>
-              <p className="text-gray-400 text-sm mt-1">Real-time jobs from multiple sources</p>
+              <h1 className="text-2xl font-bold text-white">Student Management</h1>
+              <p className="text-gray-400 text-sm mt-1">Manage and track student progress</p>
             </div>
             <button
-              onClick={() => fetchJobs(true)}
-              disabled={refreshing}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors disabled:opacity-50"
+              onClick={() => setShowAddModal(true)}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
             >
-              <ArrowPathIcon className={`h-5 w-5 ${refreshing ? 'animate-spin' : ''}`} />
-              <span>{refreshing ? 'Refreshing...' : 'Refresh Jobs'}</span>
+              <UserPlusIcon className="h-5 w-5" />
+              <span>Add Student</span>
             </button>
           </div>
 
@@ -100,137 +183,165 @@ export default function JobsPage() {
               <MagnifyingGlassIcon className="h-5 w-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search jobs..."
+                placeholder="Search students..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-10 pr-4 py-2 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
               />
             </div>
             <select
-              value={selectedType}
-              onChange={(e) => setSelectedType(e.target.value)}
+              value={selectedDepartment}
+              onChange={(e) => setSelectedDepartment(e.target.value)}
               className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              {jobTypes.map(type => (
-                <option key={type} value={type}>
-                  {type === 'all' ? 'All Types' : type}
+              {departments.map(dept => (
+                <option key={dept} value={dept}>
+                  {dept === 'all' ? 'All Departments' : dept}
                 </option>
               ))}
             </select>
+            <select
+              value={selectedStatus}
+              onChange={(e) => setSelectedStatus(e.target.value)}
+              className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">All Status</option>
+              <option value="active">Active</option>
+              <option value="training">Training</option>
+              <option value="placed">Placed</option>
+            </select>
             <button className="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors">
               <FunnelIcon className="h-5 w-5" />
-              <span>More Filters</span>
+              <span>Filter</span>
+            </button>
+            <button className="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors">
+              <ArrowDownTrayIcon className="h-5 w-5" />
+              <span>Export</span>
             </button>
           </div>
         </div>
 
-        {/* Stats */}
+        {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
-            <p className="text-gray-400 text-sm">Total Jobs</p>
-            <p className="text-3xl font-bold text-white mt-2">{jobs.length}</p>
+            <p className="text-gray-400 text-sm">Total Students</p>
+            <p className="text-3xl font-bold text-white mt-2">{students.length}</p>
+            <span className="text-xs text-green-400 mt-2 block">↑ 12% this month</span>
           </div>
           <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
-            <p className="text-gray-400 text-sm">Remote Jobs</p>
+            <p className="text-gray-400 text-sm">Placement Ready</p>
             <p className="text-3xl font-bold text-green-400 mt-2">
-              {jobs.filter(j => j.location?.toLowerCase().includes('remote')).length}
+              {students.filter(s => s.matchScore > 80).length}
             </p>
+            <span className="text-xs text-gray-400 mt-2 block">Match score {'>'}80%</span>
           </div>
           <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
-            <p className="text-gray-400 text-sm">New Today</p>
-            <p className="text-3xl font-bold text-yellow-400 mt-2">23</p>
+            <p className="text-gray-400 text-sm">In Training</p>
+            <p className="text-3xl font-bold text-yellow-400 mt-2">
+              {students.filter(s => s.status === 'training').length}
+            </p>
+            <span className="text-xs text-gray-400 mt-2 block">Skill development</span>
           </div>
           <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
-            <p className="text-gray-400 text-sm">Avg. Salary</p>
-            <p className="text-3xl font-bold text-blue-400 mt-2">$95k</p>
+            <p className="text-gray-400 text-sm">Successfully Placed</p>
+            <p className="text-3xl font-bold text-blue-400 mt-2">
+              {students.filter(s => s.status === 'placed').length}
+            </p>
+            <span className="text-xs text-gray-400 mt-2 block">This semester</span>
           </div>
         </div>
 
-        {/* Job Cards */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <AnimatePresence>
-            {filteredJobs.map((job, index) => (
-              <motion.div
-                key={job.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                transition={{ delay: index * 0.05 }}
-                className="bg-gray-900 rounded-xl border border-gray-800 p-6 hover:border-gray-700 transition-all"
-              >
-                <div className="flex justify-between items-start mb-4">
-                  <div className="flex items-start space-x-4">
-                    <div className="h-12 w-12 rounded-lg bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white text-xl font-bold">
-                      {job.company?.charAt(0) || 'J'}
-                    </div>
-                    <div>
-                      <h3 className="text-lg font-semibold text-white">{job.title}</h3>
-                      <p className="text-gray-400 flex items-center mt-1">
-                        <BuildingOfficeIcon className="h-4 w-4 mr-1" />
-                        {job.company}
-                      </p>
-                    </div>
-                  </div>
-                  <button className="p-2 hover:bg-gray-800 rounded-lg transition-colors">
-                    <BookmarkIcon className="h-5 w-5 text-gray-400" />
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  <div className="flex items-center text-sm text-gray-400">
-                    <MapPinIcon className="h-4 w-4 mr-2" />
-                    {job.location || 'Remote'}
-                  </div>
-                  <div className="flex items-center text-sm text-gray-400">
-                    <CurrencyDollarIcon className="h-4 w-4 mr-2" />
-                    {job.salary?.min || '80'}k - {job.salary?.max || '120'}k
-                  </div>
-                  <div className="flex items-center text-sm text-gray-400">
-                    <BriefcaseIcon className="h-4 w-4 mr-2" />
-                    {job.type || 'Full-time'}
-                  </div>
-                  <div className="flex items-center text-sm text-gray-400">
-                    <ClockIcon className="h-4 w-4 mr-2" />
-                    {job.postedDate ? new Date(job.postedDate).toLocaleDateString() : 'Recently'}
-                  </div>
-                </div>
-
-                <div className="mb-4">
-                  <p className="text-sm text-gray-300 line-clamp-2">{job.description || 'No description available'}</p>
-                </div>
-
-                <div className="flex flex-wrap gap-2 mb-4">
-                  {job.skills?.slice(0, 5).map(skill => (
-                    <span key={skill} className="text-xs bg-gray-800 text-gray-300 px-2 py-1 rounded">
-                      {skill}
-                    </span>
+        {/* Students Table */}
+        <div className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-gray-800/50 border-b border-gray-700">
+                  <th className="text-left py-4 px-6 text-sm font-medium text-gray-400">Student</th>
+                  <th className="text-left py-4 px-6 text-sm font-medium text-gray-400">Department</th>
+                  <th className="text-left py-4 px-6 text-sm font-medium text-gray-400">Skills</th>
+                  <th className="text-left py-4 px-6 text-sm font-medium text-gray-400">Match Score</th>
+                  <th className="text-left py-4 px-6 text-sm font-medium text-gray-400">Status</th>
+                  <th className="text-left py-4 px-6 text-sm font-medium text-gray-400">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <AnimatePresence>
+                  {filteredStudents.map((student, index) => (
+                    <motion.tr
+                      key={student.id}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -20 }}
+                      transition={{ delay: index * 0.05 }}
+                      className="border-b border-gray-800 hover:bg-gray-800/30 transition-colors"
+                    >
+                      <td className="py-4 px-6">
+                        <div className="flex items-center space-x-3">
+                          <div className="h-10 w-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold">
+                            {student.name.charAt(0)}
+                          </div>
+                          <div>
+                            <p className="text-white font-medium">{student.name}</p>
+                            <p className="text-sm text-gray-400">{student.email}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-4 px-6 text-white">{student.department}</td>
+                      <td className="py-4 px-6">
+                        <div className="flex flex-wrap gap-1">
+                          {student.skills.slice(0, 3).map(skill => (
+                            <span key={skill.name} className="text-xs bg-gray-800 text-gray-300 px-2 py-1 rounded">
+                              {skill.name}
+                            </span>
+                          ))}
+                          {student.skills.length > 3 && (
+                            <span className="text-xs bg-gray-800 text-gray-300 px-2 py-1 rounded">
+                              +{student.skills.length - 3}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-4 px-6">
+                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${getScoreColor(student.matchScore)} bg-opacity-20`}>
+                          {student.matchScore}%
+                        </span>
+                      </td>
+                      <td className="py-4 px-6">
+                        <span className={`px-3 py-1 rounded-full text-sm ${getStatusColor(student.status)}`}>
+                          {student.status}
+                        </span>
+                      </td>
+                      <td className="py-4 px-6">
+                        <div className="flex space-x-2">
+                          <button 
+                            onClick={() => setSelectedStudent(student)}
+                            className="p-2 hover:bg-gray-700 rounded-lg transition-colors"
+                          >
+                            <PencilIcon className="h-4 w-4 text-gray-400" />
+                          </button>
+                          <button className="p-2 hover:bg-gray-700 rounded-lg transition-colors">
+                            <TrashIcon className="h-4 w-4 text-gray-400" />
+                          </button>
+                          <button className="p-2 hover:bg-gray-700 rounded-lg transition-colors">
+                            <ChartBarIcon className="h-4 w-4 text-gray-400" />
+                          </button>
+                        </div>
+                      </td>
+                    </motion.tr>
                   ))}
-                </div>
-
-                <div className="flex justify-between items-center pt-4 border-t border-gray-800">
-                  <span className="text-xs text-gray-500">Source: {job.source || 'Manual'}</span>
-                  <div className="flex space-x-2">
-                    <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm transition-colors">
-                      View Details
-                    </button>
-                    {job.matchCount && (
-                      <span className="bg-green-900/50 text-green-400 px-3 py-2 rounded-lg text-sm">
-                        {job.matchCount} matches
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        </div>
-
-        {filteredJobs.length === 0 && !loading && (
-          <div className="text-center py-12 bg-gray-900 rounded-2xl border border-gray-800">
-            <BriefcaseIcon className="h-12 w-12 mx-auto text-gray-600 mb-3" />
-            <p className="text-gray-400">No jobs found matching your criteria</p>
+                </AnimatePresence>
+              </tbody>
+            </table>
           </div>
-        )}
+          
+          {filteredStudents.length === 0 && !loading && (
+            <div className="text-center py-12">
+              <AcademicCapIcon className="h-12 w-12 mx-auto text-gray-600 mb-3" />
+              <p className="text-gray-400">No students found</p>
+            </div>
+          )}
+        </div>
       </div>
     </DashboardLayout>
   );

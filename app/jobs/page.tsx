@@ -74,7 +74,7 @@ export default function JobsPage() {
   const jobTypes = [...new Set(jobs.map(j => j.type))];
 
   return (
-    <DashboardLayout activeTab="jobs">
+    <DashboardLayout>
       <div className="space-y-6">
         {/* Header */}
         <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800">

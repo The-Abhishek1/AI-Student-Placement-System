@@ -4,11 +4,12 @@ import { useState, useEffect } from 'react';
 import DashboardLayout from '../components/DashboardLayout';
 import {
   ChartBarIcon,
-  TrendingUpIcon,
+  ArrowTrendingUpIcon, // Changed from TrendingUpIcon
   UserGroupIcon,
   AcademicCapIcon,
   BriefcaseIcon,
-  CalendarIcon
+  CalendarIcon,
+  BuildingOfficeIcon // Added for company stats
 } from '@heroicons/react/24/outline';
 import {
   LineChart,
@@ -61,7 +62,7 @@ export default function AnalyticsPage() {
   const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444'];
 
   return (
-    <DashboardLayout activeTab="analytics">
+    <DashboardLayout>
       <div className="space-y-6">
         {/* Header */}
         <div className="bg-gray-900 rounded-2xl p-6 border border-gray-800">
@@ -93,7 +94,7 @@ export default function AnalyticsPage() {
                 <span className="text-xs text-green-400 mt-2 block">↑ 12.3% from last year</span>
               </div>
               <div className="h-12 w-12 bg-blue-500/20 rounded-lg flex items-center justify-center">
-                <TrendingUpIcon className="h-6 w-6 text-blue-400" />
+                <ArrowTrendingUpIcon className="h-6 w-6 text-blue-400" />
               </div>
             </div>
           </div>

@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: student-placement-mongodb
+    restart: always
+    environment:
+      # Root admin credentials
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin123
+      # Initial database to create
+      MONGO_INITDB_DATABASE: student-placement
+    ports:
+      - "27017:27017"
+    volumes:
+      # Persistent data storage
+      - mongodb_data:/data/db
+      # Database initialization scripts
+      - ./init-scripts:/docker-entrypoint-initdb.d
+      # Configuration
+      - ./mongod.conf:/etc/mongod.conf
+    networks:
+      - student-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+  # Optional: Mongo Express for web-based admin UI
+  mongo-express:
+    image: mongo-express:latest
+    container_name: mongo-express
+    restart: always
+    ports:
+      - "8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: admin
+      ME_CONFIG_MONGODB_ADMINPASSWORD: admin123
+      ME_CONFIG_MONGODB_SERVER: mongodb
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: admin123
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - student-network
+
+networks:
+  student-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+    driver: local

@@ -14,20 +14,35 @@ import {
   BriefcaseIcon,
   ChartBarIcon,
   CheckCircleIcon,
-  XCircleIcon
+  XCircleIcon,
+  DocumentArrowDownIcon
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
+import * as XLSX from 'xlsx';
+import AddStudentModal from '../components/AddStudentModal';
 
 interface Student {
-  id: string;
+  _id: string;
   name: string;
   email: string;
   department: string;
   graduationYear: number;
-  skills: Array<{ name: string; level: string }>;
+  skills: Array<{ name: string; level: string; yearsOfExperience: number }>;
+  experience: Array<{ company: string; role: string; startDate: string; endDate?: string; description: string }>;
+  education: Array<{ institution: string; degree: string; field: string; startYear: number; endYear: number; grade?: string }>;
+  preferences: {
+    roles: string[];
+    locations: string[];
+    remote: boolean;
+    salaryMin: number;
+    salaryMax: number;
+    jobType: string;
+  };
   matchScore: number;
   status: 'active' | 'placed' | 'training';
-  avatar?: string;
+  placedAt?: string;
+  placedCompany?: string;
+  createdAt: string;
 }
 
 export default function StudentsPage() {
@@ -38,6 +53,7 @@ export default function StudentsPage() {
   const [selectedStatus, setSelectedStatus] = useState('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
 
   useEffect(() => {
     fetchStudents();
@@ -46,100 +62,89 @@ export default function StudentsPage() {
   const fetchStudents = async () => {
     try {
       setLoading(true);
-      // Mock data - replace with actual API call
-      const mockStudents: Student[] = [
-        {
-          id: '1',
-          name: 'Sarah Chen',
-          email: 'sarah.chen@example.com',
-          department: 'Computer Science',
-          graduationYear: 2024,
-          skills: [
-            { name: 'Python', level: 'advanced' },
-            { name: 'React', level: 'intermediate' },
-            { name: 'Machine Learning', level: 'intermediate' }
-          ],
-          matchScore: 98,
-          status: 'active'
-        },
-        {
-          id: '2',
-          name: 'Alex Kumar',
-          email: 'alex.kumar@example.com',
-          department: 'Data Science',
-          graduationYear: 2024,
-          skills: [
-            { name: 'Python', level: 'advanced' },
-            { name: 'SQL', level: 'advanced' },
-            { name: 'TensorFlow', level: 'intermediate' }
-          ],
-          matchScore: 94,
-          status: 'active'
-        },
-        {
-          id: '3',
-          name: 'Maria Garcia',
-          email: 'maria.garcia@example.com',
-          department: 'Cybersecurity',
-          graduationYear: 2025,
-          skills: [
-            { name: 'Network Security', level: 'advanced' },
-            { name: 'Python', level: 'intermediate' },
-            { name: 'Ethical Hacking', level: 'intermediate' }
-          ],
-          matchScore: 82,
-          status: 'training'
-        },
-        {
-          id: '4',
-          name: 'James Wilson',
-          email: 'james.wilson@example.com',
-          department: 'Computer Science',
-          graduationYear: 2024,
-          skills: [
-            { name: 'Java', level: 'advanced' },
-            { name: 'Spring Boot', level: 'intermediate' },
-            { name: 'AWS', level: 'beginner' }
-          ],
-          matchScore: 76,
-          status: 'training'
-        },
-        {
-          id: '5',
-          name: 'Priya Patel',
-          email: 'priya.patel@example.com',
-          department: 'Data Science',
-          graduationYear: 2023,
-          skills: [
-            { name: 'Python', level: 'advanced' },
-            { name: 'R', level: 'advanced' },
-            { name: 'Statistics', level: 'expert' }
-          ],
-          matchScore: 95,
-          status: 'placed'
-        }
-      ];
-      
-      setStudents(mockStudents);
+      const res = await fetch('/api/students');
+      const data = await res.json();
+      if (data.success) {
+        setStudents(data.students);
+      } else {
+        toast.error('Failed to load students');
+      }
     } catch (error) {
       console.error('Fetch students error:', error);
-      toast.error('Failed to load students');
+      toast.error('Error loading students');
     } finally {
       setLoading(false);
     }
   };
 
-  // Fix: Properly filter students
+  const handleDelete = async (id: string) => {
+    try {
+      const res = await fetch(`/api/students?id=${id}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (data.success) {
+        setStudents(students.filter(s => s._id !== id));
+        toast.success('Student deleted successfully');
+      } else {
+        toast.error(data.error || 'Failed to delete student');
+      }
+    } catch (error) {
+      console.error('Delete error:', error);
+      toast.error('Error deleting student');
+    }
+    setShowDeleteConfirm(null);
+  };
+
+  const handleStatusChange = async (id: string, newStatus: string) => {
+    try {
+      const res = await fetch(`/api/students?id=${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setStudents(students.map(s => 
+          s._id === id ? { ...s, status: newStatus as any } : s
+        ));
+        toast.success('Status updated');
+      }
+    } catch (error) {
+      console.error('Status update error:', error);
+      toast.error('Failed to update status');
+    }
+  };
+
+  const exportToExcel = () => {
+    const exportData = students.map(s => ({
+      Name: s.name,
+      Email: s.email,
+      Department: s.department,
+      'Graduation Year': s.graduationYear,
+      'Match Score': `${s.matchScore}%`,
+      Status: s.status,
+      Skills: s.skills.map(sk => `${sk.name} (${sk.level})`).join(', '),
+      'Placed Company': s.placedCompany || 'N/A'
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Students');
+    XLSX.writeFile(wb, `students_${new Date().toISOString().split('T')[0]}.xlsx`);
+    toast.success('Exported successfully');
+  };
+
   const filteredStudents = students.filter(student => {
-    const matchesSearch = student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         student.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         student.department.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = 
+      student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      student.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      student.department.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesDept = selectedDepartment === 'all' || student.department === selectedDepartment;
     const matchesStatus = selectedStatus === 'all' || student.status === selectedStatus;
     return matchesSearch && matchesDept && matchesStatus;
   });
 
-  // Fix: Get unique departments using Array.from instead of spread with Set
   const departments = ['all', ...Array.from(new Set(students.map(s => s.department)))];
 
   const getStatusColor = (status: string) => {
@@ -168,13 +173,22 @@ export default function StudentsPage() {
               <h1 className="text-2xl font-bold text-white">Student Management</h1>
               <p className="text-gray-400 text-sm mt-1">Manage and track student progress</p>
             </div>
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
-            >
-              <UserPlusIcon className="h-5 w-5" />
-              <span>Add Student</span>
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={exportToExcel}
+                className="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
+              >
+                <DocumentArrowDownIcon className="h-5 w-5" />
+                <span>Export</span>
+              </button>
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
+              >
+                <UserPlusIcon className="h-5 w-5" />
+                <span>Add Student</span>
+              </button>
+            </div>
           </div>
 
           {/* Filters */}
@@ -210,14 +224,6 @@ export default function StudentsPage() {
               <option value="training">Training</option>
               <option value="placed">Placed</option>
             </select>
-            <button className="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors">
-              <FunnelIcon className="h-5 w-5" />
-              <span>Filter</span>
-            </button>
-            <button className="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors">
-              <ArrowDownTrayIcon className="h-5 w-5" />
-              <span>Export</span>
-            </button>
           </div>
         </div>
 
@@ -226,28 +232,24 @@ export default function StudentsPage() {
           <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
             <p className="text-gray-400 text-sm">Total Students</p>
             <p className="text-3xl font-bold text-white mt-2">{students.length}</p>
-            <span className="text-xs text-green-400 mt-2 block">↑ 12% this month</span>
           </div>
           <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
             <p className="text-gray-400 text-sm">Placement Ready</p>
             <p className="text-3xl font-bold text-green-400 mt-2">
               {students.filter(s => s.matchScore > 80).length}
             </p>
-            <span className="text-xs text-gray-400 mt-2 block">Match score {'>'}80%</span>
           </div>
           <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
             <p className="text-gray-400 text-sm">In Training</p>
             <p className="text-3xl font-bold text-yellow-400 mt-2">
               {students.filter(s => s.status === 'training').length}
             </p>
-            <span className="text-xs text-gray-400 mt-2 block">Skill development</span>
           </div>
           <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
             <p className="text-gray-400 text-sm">Successfully Placed</p>
             <p className="text-3xl font-bold text-blue-400 mt-2">
               {students.filter(s => s.status === 'placed').length}
             </p>
-            <span className="text-xs text-gray-400 mt-2 block">This semester</span>
           </div>
         </div>
 
@@ -269,7 +271,7 @@ export default function StudentsPage() {
                 <AnimatePresence>
                   {filteredStudents.map((student, index) => (
                     <motion.tr
-                      key={student.id}
+                      key={student._id}
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -20 }}
@@ -303,14 +305,20 @@ export default function StudentsPage() {
                         </div>
                       </td>
                       <td className="py-4 px-6">
-                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${getScoreColor(student.matchScore)} bg-opacity-20`}>
+                        <span className={`font-bold ${getScoreColor(student.matchScore)}`}>
                           {student.matchScore}%
                         </span>
                       </td>
                       <td className="py-4 px-6">
-                        <span className={`px-3 py-1 rounded-full text-sm ${getStatusColor(student.status)}`}>
-                          {student.status}
-                        </span>
+                        <select
+                          value={student.status}
+                          onChange={(e) => handleStatusChange(student._id, e.target.value)}
+                          className={`px-3 py-1 rounded-full text-sm ${getStatusColor(student.status)} bg-gray-800 border-0 cursor-pointer`}
+                        >
+                          <option value="active">Active</option>
+                          <option value="training">Training</option>
+                          <option value="placed">Placed</option>
+                        </select>
                       </td>
                       <td className="py-4 px-6">
                         <div className="flex space-x-2">
@@ -320,9 +328,29 @@ export default function StudentsPage() {
                           >
                             <PencilIcon className="h-4 w-4 text-gray-400" />
                           </button>
-                          <button className="p-2 hover:bg-gray-700 rounded-lg transition-colors">
-                            <TrashIcon className="h-4 w-4 text-gray-400" />
-                          </button>
+                          {showDeleteConfirm === student._id ? (
+                            <div className="flex space-x-1">
+                              <button
+                                onClick={() => handleDelete(student._id)}
+                                className="p-2 bg-red-600 rounded-lg"
+                              >
+                                <CheckCircleIcon className="h-4 w-4 text-white" />
+                              </button>
+                              <button
+                                onClick={() => setShowDeleteConfirm(null)}
+                                className="p-2 bg-gray-700 rounded-lg"
+                              >
+                                <XCircleIcon className="h-4 w-4 text-white" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button 
+                              onClick={() => setShowDeleteConfirm(student._id)}
+                              className="p-2 hover:bg-gray-700 rounded-lg transition-colors"
+                            >
+                              <TrashIcon className="h-4 w-4 text-gray-400" />
+                            </button>
+                          )}
                           <button className="p-2 hover:bg-gray-700 rounded-lg transition-colors">
                             <ChartBarIcon className="h-4 w-4 text-gray-400" />
                           </button>
@@ -343,6 +371,13 @@ export default function StudentsPage() {
           )}
         </div>
       </div>
+      <AddStudentModal
+  isOpen={showAddModal}
+  onClose={() => setShowAddModal(false)}
+  onStudentAdded={fetchStudents}
+/>
+
+      {/* Add/Edit Modal would go here - you can implement this similarly */}
     </DashboardLayout>
   );
 }

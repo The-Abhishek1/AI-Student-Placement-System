@@ -1,8 +1,9 @@
 'use client';
 
-import { Fragment, useState } from 'react';
+import { Fragment, useState, useEffect } from 'react';
 import { Dialog, Menu, Transition } from '@headlessui/react';
-import { useRouter, usePathname } from 'next/navigation';
+import { usePathname } from 'next/navigation';
+import { signOut, useSession } from 'next-auth/react';
 import Link from 'next/link';
 import {
   Bars3Icon,
@@ -11,10 +12,10 @@ import {
   BriefcaseIcon,
   ChartBarIcon,
   Cog6ToothIcon,
-  XMarkIcon,
   RocketLaunchIcon,
   BellIcon,
-  UserCircleIcon
+  UserCircleIcon,
+  ArrowRightOnRectangleIcon
 } from '@heroicons/react/24/outline';
 import { MagnifyingGlassIcon } from '@heroicons/react/20/solid';
 
@@ -29,8 +30,43 @@ const navigation = [
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const router = useRouter();
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [mounted, setMounted] = useState(false);
   const pathname = usePathname();
+  const { data: session, status } = useSession();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (mounted && session?.user?.id) {
+      fetchNotifications();
+    }
+  }, [mounted, session]);
+
+  const fetchNotifications = async () => {
+    try {
+      const res = await fetch('/api/notifications');
+      const data = await res.json();
+      if (data.success) {
+        setNotifications(data.notifications || []);
+        setUnreadCount(data.unreadCount || 0);
+      }
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+    }
+  };
+
+  const handleLogout = async () => {
+    await signOut({ redirectTo: '/login' });
+  };
+
+  // Don't render until after mounting to prevent hydration mismatch
+  if (!mounted) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-gray-950">
@@ -146,46 +182,31 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <Bars3Icon className="h-6 w-6" aria-hidden="true" />
           </button>
 
-          {/* Separator */}
-          <div className="h-6 w-px bg-gray-800 lg:hidden" aria-hidden="true" />
-
           <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
-            <form className="relative flex flex-1" action="#" method="GET">
-              <label htmlFor="search-field" className="sr-only">
-                Search
-              </label>
+            <div className="relative flex flex-1">
               <MagnifyingGlassIcon
                 className="pointer-events-none absolute inset-y-0 left-0 h-full w-5 text-gray-500"
                 aria-hidden="true"
               />
               <input
-                id="search-field"
                 className="block h-full w-full border-0 bg-transparent py-0 pl-8 pr-0 text-white focus:ring-0 sm:text-sm"
                 placeholder="Search students, jobs, skills..."
                 type="search"
-                name="search"
               />
-            </form>
-            <div className="flex items-center gap-x-4 lg:gap-x-6">
-              <button className="-m-2.5 p-2.5 text-gray-400 hover:text-gray-300 relative">
-                <span className="sr-only">View notifications</span>
-                <BellIcon className="h-6 w-6" aria-hidden="true" />
-                <span className="absolute top-0 right-0 h-2 w-2 rounded-full bg-red-500"></span>
-              </button>
+            </div>
 
-              {/* Profile dropdown */}
+            <div className="flex items-center gap-x-4 lg:gap-x-6">
+              {/* Notifications dropdown */}
               <Menu as="div" className="relative">
-                <Menu.Button className="-m-1.5 flex items-center p-1.5">
-                  <span className="sr-only">Open user menu</span>
-                  <div className="h-8 w-8 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white text-sm font-bold">
-                    AU
-                  </div>
-                  <span className="hidden lg:flex lg:items-center">
-                    <span className="ml-4 text-sm font-semibold leading-6 text-white" aria-hidden="true">
-                      Admin User
+                <Menu.Button className="-m-2.5 p-2.5 text-gray-400 hover:text-gray-300 relative">
+                  <BellIcon className="h-6 w-6" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-red-500 text-xs text-white flex items-center justify-center">
+                      {unreadCount > 9 ? '9+' : unreadCount}
                     </span>
-                  </span>
+                  )}
                 </Menu.Button>
+
                 <Transition
                   as={Fragment}
                   enter="transition ease-out duration-100"
@@ -195,37 +216,88 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   leaveFrom="transform opacity-100 scale-100"
                   leaveTo="transform opacity-0 scale-95"
                 >
-                  <Menu.Items className="absolute right-0 z-10 mt-2.5 w-32 origin-top-right rounded-md bg-gray-800 py-2 shadow-lg ring-1 ring-gray-700 focus:outline-none">
+                  <Menu.Items className="absolute right-0 z-10 mt-2.5 w-80 origin-top-right rounded-md bg-gray-800 py-2 shadow-lg ring-1 ring-gray-700 focus:outline-none">
+                    <div className="px-4 py-2 border-b border-gray-700">
+                      <h3 className="text-sm font-semibold text-white">Notifications</h3>
+                    </div>
+                    
+                    <div className="max-h-96 overflow-y-auto">
+                      {notifications.length === 0 ? (
+                        <p className="text-center text-gray-400 py-4 text-sm">
+                          No notifications
+                        </p>
+                      ) : (
+                        notifications.slice(0, 5).map((notification: any) => (
+                          <Menu.Item key={notification.id}>
+                            {({ active }) => (
+                              <div
+                                className={`w-full text-left px-4 py-3 ${
+                                  active ? 'bg-gray-700' : ''
+                                }`}
+                              >
+                                <p className="text-sm font-medium text-white">
+                                  {notification.title}
+                                </p>
+                                <p className="text-xs text-gray-400 mt-1">
+                                  {notification.message}
+                                </p>
+                              </div>
+                            )}
+                          </Menu.Item>
+                        ))
+                      )}
+                    </div>
+                  </Menu.Items>
+                </Transition>
+              </Menu>
+
+              {/* Profile dropdown */}
+              <Menu as="div" className="relative">
+                <Menu.Button className="-m-1.5 flex items-center p-1.5">
+                  <div className="h-8 w-8 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white text-sm font-bold">
+                    {session?.user?.name?.charAt(0) || 'A'}
+                  </div>
+                  <span className="hidden lg:flex lg:items-center">
+                    <span className="ml-4 text-sm font-semibold leading-6 text-white">
+                      {session?.user?.name || 'Admin User'}
+                    </span>
+                  </span>
+                </Menu.Button>
+
+                <Transition
+                  as={Fragment}
+                  enter="transition ease-out duration-100"
+                  enterFrom="transform opacity-0 scale-95"
+                  enterTo="transform opacity-100 scale-100"
+                  leave="transition ease-in duration-75"
+                  leaveFrom="transform opacity-100 scale-100"
+                  leaveTo="transform opacity-0 scale-95"
+                >
+                  <Menu.Items className="absolute right-0 z-10 mt-2.5 w-48 origin-top-right rounded-md bg-gray-800 py-2 shadow-lg ring-1 ring-gray-700 focus:outline-none">
                     <Menu.Item>
                       {({ active }) => (
-                        <button
+                        <Link
+                          href="/settings"
                           className={`${
                             active ? 'bg-gray-700' : ''
-                          } block px-3 py-1 text-sm text-white w-full text-left`}
+                          } block px-4 py-2 text-sm text-white`}
                         >
-                          Profile
-                        </button>
+                          Profile Settings
+                        </Link>
                       )}
                     </Menu.Item>
                     <Menu.Item>
                       {({ active }) => (
                         <button
+                          onClick={handleLogout}
                           className={`${
                             active ? 'bg-gray-700' : ''
-                          } block px-3 py-1 text-sm text-white w-full text-left`}
+                          } block w-full text-left px-4 py-2 text-sm text-red-400`}
                         >
-                          Settings
-                        </button>
-                      )}
-                    </Menu.Item>
-                    <Menu.Item>
-                      {({ active }) => (
-                        <button
-                          className={`${
-                            active ? 'bg-gray-700' : ''
-                          } block px-3 py-1 text-sm text-red-400 w-full text-left`}
-                        >
-                          Logout
+                          <div className="flex items-center">
+                            <ArrowRightOnRectangleIcon className="h-4 w-4 mr-2" />
+                            Logout
+                          </div>
                         </button>
                       )}
                     </Menu.Item>

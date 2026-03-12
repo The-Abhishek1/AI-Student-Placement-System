@@ -1,5 +1,6 @@
 'use client';
 
+
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import DashboardLayout from '../components/DashboardLayout';
@@ -12,66 +13,132 @@ import {
   ArrowPathIcon,
   BookmarkIcon,
   MagnifyingGlassIcon,
-  FunnelIcon
+  FunnelIcon,
+  PlusIcon,
+  PencilIcon,
+  TrashIcon,
+  CheckCircleIcon,
+  XCircleIcon
 } from '@heroicons/react/24/outline';
 import toast from 'react-hot-toast';
+import AddJobModal from '../components/AddJobModal';
 
 interface Job {
-  id: string;
+  _id: string;
   title: string;
   company: string;
   location: string;
+  remote: boolean;
   salary: {
     min: number;
     max: number;
     currency: string;
   };
-  type: string;
-  postedDate: string;
-  skills: string[];
   description: string;
+  requirements: string[];
+  skills: string[];
+  type: 'fulltime' | 'parttime' | 'internship' | 'contract';
+  postedDate: string;
+  deadline?: string;
   source: string;
-  matchCount?: number;
+  active: boolean;
+  applicants: number;
+  matchCount: number;
 }
 
 export default function JobsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedType, setSelectedType] = useState('all');
+  const [selectedRemote, setSelectedRemote] = useState('all');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-
-  const fetchJobs = async (refresh = false) => {
-    try {
-      if (refresh) setRefreshing(true);
-      else setLoading(true);
-      
-      const res = await fetch(`/api/jobs?keywords=software,data,ai&location=remote`);
-      const data = await res.json();
-      setJobs(data.jobs || []);
-      
-      if (refresh) toast.success('Jobs refreshed successfully');
-    } catch (error) {
-      console.error('Fetch jobs error:', error);
-      toast.error('Failed to load jobs');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+  const [showAddModal, setShowAddModal] = useState(false);
 
   useEffect(() => {
     fetchJobs();
   }, []);
 
+  const fetchJobs = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch('/api/jobs');
+      const data = await res.json();
+      if (data.success) {
+        setJobs(data.jobs);
+      }
+    } catch (error) {
+      console.error('Fetch jobs error:', error);
+      toast.error('Failed to load jobs');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      const res = await fetch(`/api/jobs?id=${id}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (data.success) {
+        setJobs(jobs.filter(j => j._id !== id));
+        toast.success('Job deleted successfully');
+      }
+    } catch (error) {
+      console.error('Delete error:', error);
+      toast.error('Failed to delete job');
+    }
+    setShowDeleteConfirm(null);
+  };
+
+  const handleToggleActive = async (id: string, currentActive: boolean) => {
+    try {
+      const res = await fetch(`/api/jobs?id=${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: !currentActive })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setJobs(jobs.map(j => 
+          j._id === id ? { ...j, active: !currentActive } : j
+        ));
+        toast.success(`Job ${!currentActive ? 'activated' : 'deactivated'}`);
+      }
+    } catch (error) {
+      console.error('Toggle error:', error);
+      toast.error('Failed to update job');
+    }
+  };
+
   const filteredJobs = jobs.filter(job => {
-    const matchesSearch = job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         job.company.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = 
+      job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      job.company.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      job.description.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesType = selectedType === 'all' || job.type === selectedType;
-    return matchesSearch && matchesType;
+    const matchesRemote = selectedRemote === 'all' || 
+      (selectedRemote === 'remote' && job.remote) ||
+      (selectedRemote === 'onsite' && !job.remote);
+    return matchesSearch && matchesType && matchesRemote;
   });
 
-  const jobTypes = [...new Set(jobs.map(j => j.type))];
+  const getTypeColor = (type: string) => {
+    switch(type) {
+      case 'fulltime': return 'bg-green-900/50 text-green-400';
+      case 'parttime': return 'bg-blue-900/50 text-blue-400';
+      case 'internship': return 'bg-yellow-900/50 text-yellow-400';
+      case 'contract': return 'bg-purple-900/50 text-purple-400';
+      default: return 'bg-gray-900/50 text-gray-400';
+    }
+  };
+
+  const formatSalary = (salary: Job['salary']) => {
+    if (!salary) return 'Not specified';
+    return `${salary.currency} ${salary.min.toLocaleString()} - ${salary.max.toLocaleString()}`;
+  };
 
   return (
     <DashboardLayout>
@@ -81,16 +148,15 @@ export default function JobsPage() {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
               <h1 className="text-2xl font-bold text-white">Job Listings</h1>
-              <p className="text-gray-400 text-sm mt-1">Real-time jobs from multiple sources</p>
+              <p className="text-gray-400 text-sm mt-1">Manage and track job opportunities</p>
             </div>
-            <button
-              onClick={() => fetchJobs(true)}
-              disabled={refreshing}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors disabled:opacity-50"
-            >
-              <ArrowPathIcon className={`h-5 w-5 ${refreshing ? 'animate-spin' : ''}`} />
-              <span>{refreshing ? 'Refreshing...' : 'Refresh Jobs'}</span>
-            </button>
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
+              >
+                <PlusIcon className="h-5 w-5" />
+                <span>Add Job</span>
+              </button>
           </div>
 
           {/* Filters */}
@@ -111,14 +177,20 @@ export default function JobsPage() {
               className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="all">All Types</option>
-              {jobTypes.map(type => (
-                <option key={type} value={type}>{type}</option>
-              ))}
+              <option value="fulltime">Full Time</option>
+              <option value="parttime">Part Time</option>
+              <option value="internship">Internship</option>
+              <option value="contract">Contract</option>
             </select>
-            <button className="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors">
-              <FunnelIcon className="h-5 w-5" />
-              <span>More Filters</span>
-            </button>
+            <select
+              value={selectedRemote}
+              onChange={(e) => setSelectedRemote(e.target.value)}
+              className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">All Locations</option>
+              <option value="remote">Remote</option>
+              <option value="onsite">On-site</option>
+            </select>
           </div>
         </div>
 
@@ -129,18 +201,22 @@ export default function JobsPage() {
             <p className="text-3xl font-bold text-white mt-2">{jobs.length}</p>
           </div>
           <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
-            <p className="text-gray-400 text-sm">Remote Jobs</p>
+            <p className="text-gray-400 text-sm">Active Jobs</p>
             <p className="text-3xl font-bold text-green-400 mt-2">
-              {jobs.filter(j => j.location.toLowerCase().includes('remote')).length}
+              {jobs.filter(j => j.active).length}
             </p>
           </div>
           <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
-            <p className="text-gray-400 text-sm">New Today</p>
-            <p className="text-3xl font-bold text-yellow-400 mt-2">23</p>
+            <p className="text-gray-400 text-sm">Remote Jobs</p>
+            <p className="text-3xl font-bold text-yellow-400 mt-2">
+              {jobs.filter(j => j.remote).length}
+            </p>
           </div>
           <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
-            <p className="text-gray-400 text-sm">Avg. Salary</p>
-            <p className="text-3xl font-bold text-blue-400 mt-2">$95k</p>
+            <p className="text-gray-400 text-sm">Total Applicants</p>
+            <p className="text-3xl font-bold text-blue-400 mt-2">
+              {jobs.reduce((sum, j) => sum + (j.applicants || 0), 0)}
+            </p>
           </div>
         </div>
 
@@ -149,12 +225,14 @@ export default function JobsPage() {
           <AnimatePresence>
             {filteredJobs.map((job, index) => (
               <motion.div
-                key={job.id}
+                key={job._id}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ delay: index * 0.05 }}
-                className="bg-gray-900 rounded-xl border border-gray-800 p-6 hover:border-gray-700 transition-all"
+                className={`bg-gray-900 rounded-xl border p-6 transition-all ${
+                  job.active ? 'border-gray-800 hover:border-gray-700' : 'border-red-900/30 opacity-60'
+                }`}
               >
                 <div className="flex justify-between items-start mb-4">
                   <div className="flex items-start space-x-4">
@@ -169,23 +247,23 @@ export default function JobsPage() {
                       </p>
                     </div>
                   </div>
-                  <button className="p-2 hover:bg-gray-800 rounded-lg transition-colors">
-                    <BookmarkIcon className="h-5 w-5 text-gray-400" />
-                  </button>
+                  <span className={`px-3 py-1 rounded-full text-xs ${getTypeColor(job.type)}`}>
+                    {job.type}
+                  </span>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 mb-4">
                   <div className="flex items-center text-sm text-gray-400">
                     <MapPinIcon className="h-4 w-4 mr-2" />
-                    {job.location}
+                    {job.location} {job.remote && '🌐'}
                   </div>
                   <div className="flex items-center text-sm text-gray-400">
                     <CurrencyDollarIcon className="h-4 w-4 mr-2" />
-                    {job.salary.min}k - {job.salary.max}k
+                    {formatSalary(job.salary)}
                   </div>
                   <div className="flex items-center text-sm text-gray-400">
                     <BriefcaseIcon className="h-4 w-4 mr-2" />
-                    {job.type}
+                    {job.applicants || 0} applicants
                   </div>
                   <div className="flex items-center text-sm text-gray-400">
                     <ClockIcon className="h-4 w-4 mr-2" />
@@ -206,15 +284,45 @@ export default function JobsPage() {
                 </div>
 
                 <div className="flex justify-between items-center pt-4 border-t border-gray-800">
-                  <span className="text-xs text-gray-500">Source: {job.source}</span>
                   <div className="flex space-x-2">
-                    <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm transition-colors">
-                      View Details
+                    <button
+                      onClick={() => handleToggleActive(job._id, job.active)}
+                      className={`px-3 py-1 rounded-lg text-xs ${
+                        job.active 
+                          ? 'bg-green-900/50 text-green-400 hover:bg-green-900/70'
+                          : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                      }`}
+                    >
+                      {job.active ? 'Active' : 'Inactive'}
                     </button>
-                    {job.matchCount && (
-                      <span className="bg-green-900/50 text-green-400 px-3 py-2 rounded-lg text-sm">
-                        {job.matchCount} matches
-                      </span>
+                    <span className="text-xs text-gray-500">Source: {job.source}</span>
+                  </div>
+                  <div className="flex space-x-2">
+                    <button className="p-2 hover:bg-gray-800 rounded-lg">
+                      <PencilIcon className="h-4 w-4 text-gray-400" />
+                    </button>
+                    {showDeleteConfirm === job._id ? (
+                      <div className="flex space-x-1">
+                        <button
+                          onClick={() => handleDelete(job._id)}
+                          className="p-2 bg-red-600 rounded-lg"
+                        >
+                          <CheckCircleIcon className="h-4 w-4 text-white" />
+                        </button>
+                        <button
+                          onClick={() => setShowDeleteConfirm(null)}
+                          className="p-2 bg-gray-700 rounded-lg"
+                        >
+                          <XCircleIcon className="h-4 w-4 text-white" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setShowDeleteConfirm(job._id)}
+                        className="p-2 hover:bg-gray-800 rounded-lg"
+                      >
+                        <TrashIcon className="h-4 w-4 text-gray-400" />
+                      </button>
                     )}
                   </div>
                 </div>
@@ -226,10 +334,15 @@ export default function JobsPage() {
         {filteredJobs.length === 0 && !loading && (
           <div className="text-center py-12 bg-gray-900 rounded-2xl border border-gray-800">
             <BriefcaseIcon className="h-12 w-12 mx-auto text-gray-600 mb-3" />
-            <p className="text-gray-400">No jobs found matching your criteria</p>
+            <p className="text-gray-400">No jobs found</p>
           </div>
         )}
       </div>
+      <AddJobModal
+        isOpen={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        onJobAdded={fetchJobs}
+      />
     </DashboardLayout>
   );
 }

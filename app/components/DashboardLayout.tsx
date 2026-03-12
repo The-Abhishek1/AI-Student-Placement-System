@@ -66,13 +66,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const router = useRouter();
   const { data: session, status, update } = useSession();
+  // Add avatar refresh trigger
+const [avatarTimestamp, setAvatarTimestamp] = useState(Date.now());
 
 
-  // Listen for avatar updates
+ // Listen for avatar updates from settings page
 useEffect(() => {
   const handleAvatarUpdate = (event: CustomEvent) => {
-    console.log('Avatar updated event received:', event.detail);
-    setAvatarKey(Date.now()); // Force avatar refresh
+    console.log('Avatar updated, refreshing header...');
+    setAvatarTimestamp(Date.now());
+    // Force session update
+    update();
   };
 
   window.addEventListener('avatar-updated', handleAvatarUpdate as EventListener);
@@ -80,7 +84,8 @@ useEffect(() => {
   return () => {
     window.removeEventListener('avatar-updated', handleAvatarUpdate as EventListener);
   };
-}, []);
+}, [update]);
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -352,22 +357,28 @@ useEffect(() => {
           transition={{ duration: 0.2 }}
           className="flex items-center gap-x-3 px-2 py-3 rounded-xl bg-gray-800/30 border border-gray-800/50 overflow-hidden mx-1"
         >
-          <div className="h-10 w-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold overflow-hidden flex-shrink-0">
-            {avatarUrl ? (
-              <img 
-                key={avatarUrl}
-                src={avatarUrl} 
-                alt={session?.user?.name || ''} 
-                className="h-full w-full object-cover"
-                onError={(e) => {
-                  console.error('Avatar load error');
-                  e.currentTarget.style.display = 'none';
-                }}
-              />
-            ) : (
-              userInitial
-            )}
-          </div>
+{/* User info in sidebar - update the avatar section */}
+<div className="h-10 w-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold overflow-hidden flex-shrink-0">
+  {avatarUrl ? (
+    <img 
+      key={avatarUrl}
+      src={avatarUrl} 
+      alt={session?.user?.name || ''} 
+      className="h-full w-full object-cover"
+      onError={(e) => {
+        console.error('Avatar load error');
+        e.currentTarget.style.display = 'none';
+        const parent = e.currentTarget.parentElement;
+        if (parent) {
+          parent.innerHTML = userInitial;
+          parent.classList.add('flex', 'items-center', 'justify-center');
+        }
+      }}
+    />
+  ) : (
+    userInitial
+  )}
+</div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-white truncate">{session?.user?.name || 'Admin User'}</p>
             <p className="text-xs text-gray-400 truncate">{session?.user?.email || 'admin@eduplace.ai'}</p>
@@ -635,31 +646,40 @@ useEffect(() => {
                 </Transition>
               </Menu>
 
-              {/* Profile dropdown */}
-              <Menu as="div" className="relative">
-                <Menu.Button className="flex items-center gap-3 p-1.5 rounded-lg hover:bg-gray-800 transition-all group">
-                  <div className="h-8 w-8 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white text-sm font-bold overflow-hidden">
-                    {avatarUrl ? (
-                      <img 
-                        key={avatarUrl}
-                        src={avatarUrl} 
-                        alt={session?.user?.name || ''}
-                        className="h-full w-full object-cover"
-                        onError={(e) => {
-                          console.error('Avatar load error in header');
-                          e.currentTarget.style.display = 'none';
-                        }}
-                      />
-                    ) : (
-                      userInitial
-                    )}
-                  </div>
-                  <span className="hidden lg:flex lg:items-center">
-                    <span className="text-sm font-semibold text-white group-hover:text-blue-400 transition-colors">
-                      {session?.user?.name || 'Admin User'}
+{/* Profile dropdown */}
+            <Menu as="div" className="relative">
+              <Menu.Button className="flex items-center gap-3 p-1.5 rounded-lg hover:bg-gray-800 transition-all group">
+                <div className="h-8 w-8 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white text-sm font-bold overflow-hidden ring-2 ring-transparent group-hover:ring-blue-500/50 transition-all">
+                  {avatarUrl ? (
+                    <img 
+                      key={avatarUrl}
+                      src={avatarUrl} 
+                      alt={session?.user?.name || ''}
+                      className="h-full w-full object-cover"
+                      onError={(e) => {
+                        console.error('Avatar load error in header');
+                        e.currentTarget.style.display = 'none';
+                        // Fallback to initials
+                        const parent = e.currentTarget.parentElement;
+                        if (parent) {
+                          parent.innerHTML = userInitial;
+                          parent.classList.add('flex', 'items-center', 'justify-center');
+                        }
+                      }}
+                    />
+                  ) : (
+                    <span className="flex items-center justify-center w-full h-full">
+                      {userInitial}
                     </span>
+                  )}
+                </div>
+                <span className="hidden lg:flex lg:items-center">
+                  <span className="text-sm font-semibold text-white group-hover:text-blue-400 transition-colors">
+                    {session?.user?.name || 'Admin User'}
                   </span>
-                </Menu.Button>
+                </span>
+              </Menu.Button>
+              {/* Rest of the menu remains the same */}
 
                 <Transition
                   as={Fragment}

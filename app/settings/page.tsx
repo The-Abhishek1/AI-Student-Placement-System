@@ -266,38 +266,45 @@ export default function SettingsPage() {
     }
   };
 
-  const uploadAvatar = async () => {
-    if (!avatarFile) return;
+const uploadAvatar = async () => {
+  if (!avatarFile) return;
 
-    const formData = new FormData();
-    formData.append('avatar', avatarFile);
+  const formData = new FormData();
+  formData.append('avatar', avatarFile);
 
-    try {
-      setAvatarUploading(true);
-      const res = await fetch('/api/user/avatar', {
-        method: 'POST',
-        body: formData
-      });
+  try {
+    setAvatarUploading(true);
+    console.log('Uploading avatar:', avatarFile.name);
+    
+    const res = await fetch('/api/user/avatar', {
+      method: 'POST',
+      body: formData
+    });
+    
+    const data = await res.json();
+    console.log('Upload response:', data);
+    
+    if (data.success) {
+      toast.success('Avatar updated successfully');
+      setProfile({ ...profile, avatar: data.url });
+      setAvatarPreview(null);
+      setAvatarFile(null);
       
-      const data = await res.json();
+      // Force a refresh of the session to get updated user data
+      await update();
       
-      if (data.success) {
-        toast.success('Avatar updated successfully');
-        setProfile({ ...profile, avatar: data.url });
-        setAvatarPreview(null);
-        setAvatarFile(null);
-        await update();
-      } else {
-        toast.error(data.error || 'Failed to upload avatar');
-      }
-    } catch (error) {
-      console.error('Upload error:', error);
-      toast.error('Failed to upload avatar');
-    } finally {
-      setAvatarUploading(false);
+      // Reload settings to ensure everything is in sync
+      await fetchUserSettings();
+    } else {
+      toast.error(data.error || 'Failed to upload avatar');
     }
-  };
-
+  } catch (error) {
+    console.error('Upload error:', error);
+    toast.error('Failed to upload avatar');
+  } finally {
+    setAvatarUploading(false);
+  }
+};
   const updateProfile = async () => {
     try {
       setSaving(true);
@@ -641,54 +648,100 @@ export default function SettingsPage() {
                   <div className="space-y-6">
                     <h2 className="text-lg font-semibold text-white">Profile Settings</h2>
                     
-                    {/* Avatar */}
-                    <div className="flex items-center space-x-6">
-                      <div className="relative">
-                        <div className="h-24 w-24 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white text-3xl font-bold overflow-hidden">
-                          {avatarPreview ? (
-                            <img src={avatarPreview} alt="Preview" className="h-full w-full object-cover" />
-                          ) : profile.avatar ? (
-                            <img src={profile.avatar} alt={profile.name} className="h-full w-full object-cover" />
-                          ) : (
-                            profile.name?.charAt(0)?.toUpperCase() || 'U'
-                          )}
-                        </div>
-                        <button
-                          onClick={() => fileInputRef.current?.click()}
-                          disabled={avatarUploading}
-                          className="absolute bottom-0 right-0 h-8 w-8 bg-gray-800 rounded-full border-2 border-gray-900 flex items-center justify-center hover:bg-gray-700 transition-colors disabled:opacity-50"
-                        >
-                          <CameraIcon className="h-4 w-4 text-gray-300" />
-                        </button>
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          accept="image/*"
-                          onChange={handleAvatarChange}
-                          className="hidden"
-                        />
-                      </div>
-                      {avatarFile && (
-                        <div className="flex space-x-2">
-                          <button
-                            onClick={uploadAvatar}
-                            disabled={avatarUploading}
-                            className="px-3 py-1 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50"
-                          >
-                            {avatarUploading ? 'Uploading...' : 'Upload'}
-                          </button>
-                          <button
-                            onClick={() => {
-                              setAvatarFile(null);
-                              setAvatarPreview(null);
-                            }}
-                            className="px-3 py-1 bg-gray-800 text-white text-sm rounded-lg hover:bg-gray-700"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      )}
-                    </div>
+{/* Avatar */}
+<div className="flex items-center space-x-6">
+  <div className="relative">
+    <div className="h-24 w-24 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white text-3xl font-bold overflow-hidden">
+      {avatarPreview ? (
+        <img 
+          src={avatarPreview} 
+          alt="Preview" 
+          className="h-full w-full object-cover"
+          onError={(e) => {
+            console.error('Error loading preview image');
+            e.currentTarget.src = '';
+          }}
+        />
+      ) : profile.avatar ? (
+        <img 
+          src={profile.avatar} 
+          alt={profile.name}
+          className="h-full w-full object-cover"
+          onError={(e) => {
+            console.error('Error loading avatar:', profile.avatar);
+            // Fallback to initials on error
+            e.currentTarget.style.display = 'none';
+            e.currentTarget.parentElement?.classList.add('flex', 'items-center', 'justify-center');
+          }}
+        />
+      ) : (
+        <span className="text-3xl">
+          {profile.name?.charAt(0)?.toUpperCase() || 'U'}
+        </span>
+      )}
+    </div>
+    <button
+      onClick={() => fileInputRef.current?.click()}
+      disabled={avatarUploading}
+      className="absolute bottom-0 right-0 h-8 w-8 bg-gray-800 rounded-full border-2 border-gray-900 flex items-center justify-center hover:bg-gray-700 transition-colors disabled:opacity-50"
+      title="Upload avatar"
+    >
+      <CameraIcon className="h-4 w-4 text-gray-300" />
+    </button>
+    <input
+      ref={fileInputRef}
+      type="file"
+      accept="image/*"
+      onChange={handleAvatarChange}
+      className="hidden"
+    />
+  </div>
+  {avatarFile && (
+    <div className="flex space-x-2">
+      <button
+        onClick={uploadAvatar}
+        disabled={avatarUploading}
+        className="px-3 py-1 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50"
+      >
+        {avatarUploading ? 'Uploading...' : 'Upload'}
+      </button>
+      <button
+        onClick={() => {
+          setAvatarFile(null);
+          setAvatarPreview(null);
+        }}
+        className="px-3 py-1 bg-gray-800 text-white text-sm rounded-lg hover:bg-gray-700"
+      >
+        Cancel
+      </button>
+    </div>
+  )}
+  {profile.avatar && !avatarFile && (
+    <div className="text-sm text-gray-400">
+      <p>Current avatar: {profile.avatar.split('/').pop()}</p>
+      <button
+        onClick={async () => {
+          if (confirm('Remove your avatar?')) {
+            try {
+              const res = await fetch('/api/user/avatar', {
+                method: 'DELETE'
+              });
+              if (res.ok) {
+                setProfile({ ...profile, avatar: '' });
+                toast.success('Avatar removed');
+              }
+            } catch (error) {
+              toast.error('Failed to remove avatar');
+            }
+          }
+        }}
+        className="text-red-400 hover:text-red-300 text-xs mt-1"
+      >
+        Remove avatar
+      </button>
+    </div>
+  )}
+</div>
 
                     {/* Profile Form */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

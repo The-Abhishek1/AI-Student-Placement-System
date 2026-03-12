@@ -5,7 +5,6 @@ import { Dialog, Menu, Transition } from '@headlessui/react';
 import { usePathname, useRouter } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import Link from 'next/link';
-import Image from 'next/image';
 import {
   Bars3Icon,
   HomeIcon,
@@ -20,17 +19,13 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   MagnifyingGlassIcon,
-  MoonIcon,
-  SunIcon,
-  ComputerDesktopIcon,
   SparklesIcon,
   XMarkIcon,
-  EnvelopeIcon,
-  CalendarIcon,
   DocumentTextIcon,
   QuestionMarkCircleIcon,
   ShieldCheckIcon,
-  AdjustmentsHorizontalIcon
+  AdjustmentsHorizontalIcon,
+  ArrowPathIcon
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
@@ -56,35 +51,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [showNotifications, setShowNotifications] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [showSearch, setShowSearch] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const [avatarKey, setAvatarKey] = useState(Date.now()); // Force avatar refresh
+  const [avatarTimestamp, setAvatarTimestamp] = useState(Date.now());
   
   const pathname = usePathname();
   const router = useRouter();
-  const { data: session, status, update } = useSession();
-  // Add avatar refresh trigger
-const [avatarTimestamp, setAvatarTimestamp] = useState(Date.now());
-
-
- // Listen for avatar updates from settings page
-useEffect(() => {
-  const handleAvatarUpdate = (event: CustomEvent) => {
-    console.log('Avatar updated, refreshing header...');
-    setAvatarTimestamp(Date.now());
-    // Force session update
-    update();
-  };
-
-  window.addEventListener('avatar-updated', handleAvatarUpdate as EventListener);
-  
-  return () => {
-    window.removeEventListener('avatar-updated', handleAvatarUpdate as EventListener);
-  };
-}, [update]);
+  const { data: session } = useSession();
 
   useEffect(() => {
     setMounted(true);
@@ -93,7 +68,6 @@ useEffect(() => {
   useEffect(() => {
     if (mounted && session?.user?.id) {
       fetchNotifications();
-      // Load sidebar state from localStorage
       const saved = localStorage.getItem('sidebarCollapsed');
       if (saved !== null) {
         setSidebarCollapsed(JSON.parse(saved));
@@ -101,12 +75,35 @@ useEffect(() => {
     }
   }, [mounted, session]);
 
-  // Update avatar when session changes
+  // Listen for avatar updates
   useEffect(() => {
-    if (session?.user?.avatar) {
-      setAvatarKey(Date.now());
-    }
-  }, [session?.user?.avatar]);
+    const handleAvatarUpdate = (event: CustomEvent) => {
+      console.log('Avatar updated, refreshing header...', event.detail);
+      setAvatarTimestamp(Date.now());
+    };
+
+    window.addEventListener('avatar-updated', handleAvatarUpdate as EventListener);
+    
+    return () => {
+      window.removeEventListener('avatar-updated', handleAvatarUpdate as EventListener);
+    };
+  }, []);
+
+  // Check sessionStorage for updates
+  useEffect(() => {
+    const checkAvatarUpdate = () => {
+      const lastUpdate = sessionStorage.getItem('avatar-updated');
+      if (lastUpdate) {
+        const updateTime = parseInt(lastUpdate);
+        if (updateTime > avatarTimestamp) {
+          setAvatarTimestamp(updateTime);
+        }
+      }
+    };
+
+    const interval = setInterval(checkAvatarUpdate, 1000);
+    return () => clearInterval(interval);
+  }, [avatarTimestamp]);
 
   const fetchNotifications = async () => {
     try {
@@ -182,15 +179,18 @@ useEffect(() => {
     await signOut({ redirectTo: '/login' });
   };
 
-  // Don't render until after mounting to prevent hydration mismatch
+  const refreshAvatar = () => {
+    setAvatarTimestamp(Date.now());
+    toast.success('Avatar refreshed');
+  };
+
   if (!mounted) {
     return null;
   }
 
-  // Get user avatar with cache busting
   const userAvatar = session?.user?.avatar || session?.user?.image || null;
   const userInitial = session?.user?.name?.charAt(0)?.toUpperCase() || 'A';
-  const avatarUrl = userAvatar ? `${userAvatar}?v=${avatarKey}` : null;
+  const avatarUrl = userAvatar ? `${userAvatar}?t=${avatarTimestamp}` : null;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-950 via-gray-900 to-gray-950">
@@ -233,7 +233,6 @@ useEffect(() => {
                     </button>
                   </div>
                   
-                  {/* Mobile user info */}
                   <div className="flex items-center gap-x-4 py-3 px-2 rounded-xl bg-gray-800/50">
                     <div className="h-10 w-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold overflow-hidden flex-shrink-0">
                       {avatarUrl ? (
@@ -243,7 +242,6 @@ useEffect(() => {
                           alt={session?.user?.name || ''} 
                           className="h-full w-full object-cover"
                           onError={(e) => {
-                            console.error('Avatar load error');
                             e.currentTarget.style.display = 'none';
                           }}
                         />
@@ -258,35 +256,30 @@ useEffect(() => {
                   </div>
 
                   <nav className="flex flex-1 flex-col">
-                    <ul role="list" className="flex flex-1 flex-col gap-y-7">
-                      <li>
-                        <ul role="list" className="-mx-2 space-y-1">
-                          {navigation.map((item) => {
-                            const isActive = pathname === item.href;
-                            return (
-                              <li key={item.name}>
-                                <Link
-                                  href={item.href}
-                                  onClick={() => setSidebarOpen(false)}
-                                  className={`group relative flex items-center gap-x-3 rounded-xl p-2 text-sm leading-6 font-semibold transition-all ${
-                                    isActive
-                                      ? `bg-gradient-to-r ${item.color} text-white shadow-lg`
-                                      : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
-                                  }`}
-                                >
-                                  <item.icon className="h-6 w-6 shrink-0" />
-                                  {item.name}
-                                </Link>
-                              </li>
-                            );
-                          })}
-                        </ul>
-                      </li>
+                    <ul role="list" className="flex flex-1 flex-col gap-y-1">
+                      {navigation.map((item) => {
+                        const isActive = pathname === item.href;
+                        return (
+                          <li key={item.name}>
+                            <Link
+                              href={item.href}
+                              onClick={() => setSidebarOpen(false)}
+                              className={`group relative flex items-center gap-x-3 rounded-xl p-2 text-sm leading-6 font-semibold transition-all ${
+                                isActive
+                                  ? `bg-gradient-to-r ${item.color} text-white shadow-lg`
+                                  : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
+                              }`}
+                            >
+                              <item.icon className="h-6 w-6 shrink-0" />
+                              {item.name}
+                            </Link>
+                          </li>
+                        );
+                      })}
                     </ul>
                   </nav>
 
-                  {/* Mobile quick actions */}
-                  <div className="space-y-2">
+                  <div className="space-y-2 mt-auto pt-4">
                     <p className="text-xs font-semibold text-gray-400 px-2">QUICK ACTIONS</p>
                     <div className="grid grid-cols-2 gap-2">
                       {quickActions.map((action) => (
@@ -313,154 +306,143 @@ useEffect(() => {
         </Dialog>
       </Transition.Root>
 
-    {/* Desktop sidebar */}
-<motion.div
-  initial={false}
-  animate={{ width: sidebarCollapsed ? '5rem' : '18rem' }}
-  transition={{ duration: 0.2, ease: 'easeInOut' }}
-  className="hidden lg:fixed lg:inset-y-0 lg:z-40 lg:flex lg:flex-col"
->
-  <div className="flex grow flex-col gap-y-5 overflow-y-auto bg-gray-900/50 backdrop-blur-xl px-3 pb-4 border-r border-gray-800/50">
-    {/* Header with logo and toggle */}
-    <div className="flex h-16 shrink-0 items-center justify-between px-2">
+      {/* Desktop sidebar */}
       <motion.div
-        animate={{ 
-          opacity: sidebarCollapsed ? 0 : 1,
-          x: sidebarCollapsed ? -20 : 0
-        }}
-        className="overflow-hidden whitespace-nowrap"
+        initial={false}
+        animate={{ width: sidebarCollapsed ? '5rem' : '18rem' }}
+        transition={{ duration: 0.2, ease: 'easeInOut' }}
+        className="hidden lg:fixed lg:inset-y-0 lg:z-40 lg:flex lg:flex-col"
       >
-        <h1 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
-          EduPlace AI
-        </h1>
-      </motion.div>
-      <button
-        onClick={toggleSidebar}
-        className="p-1.5 rounded-lg hover:bg-gray-800 transition-colors text-gray-400 hover:text-white flex-shrink-0"
-        title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-      >
-        {sidebarCollapsed ? (
-          <ChevronRightIcon className="h-5 w-5" />
-        ) : (
-          <ChevronLeftIcon className="h-5 w-5" />
-        )}
-      </button>
-    </div>
-
-    {/* User info in sidebar - hidden when collapsed */}
-    <AnimatePresence>
-      {!sidebarCollapsed && (
-        <motion.div
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: 'auto' }}
-          exit={{ opacity: 0, height: 0 }}
-          transition={{ duration: 0.2 }}
-          className="flex items-center gap-x-3 px-2 py-3 rounded-xl bg-gray-800/30 border border-gray-800/50 overflow-hidden mx-1"
-        >
-{/* User info in sidebar - update the avatar section */}
-<div className="h-10 w-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold overflow-hidden flex-shrink-0">
-  {avatarUrl ? (
-    <img 
-      key={avatarUrl}
-      src={avatarUrl} 
-      alt={session?.user?.name || ''} 
-      className="h-full w-full object-cover"
-      onError={(e) => {
-        console.error('Avatar load error');
-        e.currentTarget.style.display = 'none';
-        const parent = e.currentTarget.parentElement;
-        if (parent) {
-          parent.innerHTML = userInitial;
-          parent.classList.add('flex', 'items-center', 'justify-center');
-        }
-      }}
-    />
-  ) : (
-    userInitial
-  )}
-</div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-white truncate">{session?.user?.name || 'Admin User'}</p>
-            <p className="text-xs text-gray-400 truncate">{session?.user?.email || 'admin@eduplace.ai'}</p>
+        <div className="flex grow flex-col gap-y-5 overflow-y-auto bg-gray-900/50 backdrop-blur-xl px-3 pb-4 border-r border-gray-800/50">
+          <div className="flex h-16 shrink-0 items-center justify-between px-2">
+            <motion.div
+              animate={{ 
+                opacity: sidebarCollapsed ? 0 : 1,
+                x: sidebarCollapsed ? -20 : 0
+              }}
+              className="overflow-hidden whitespace-nowrap"
+            >
+              <h1 className="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+                EduPlace AI
+              </h1>
+            </motion.div>
+            <button
+              onClick={toggleSidebar}
+              className="p-1.5 rounded-lg hover:bg-gray-800 transition-colors text-gray-400 hover:text-white flex-shrink-0"
+              title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              {sidebarCollapsed ? (
+                <ChevronRightIcon className="h-5 w-5" />
+              ) : (
+                <ChevronLeftIcon className="h-5 w-5" />
+              )}
+            </button>
           </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
 
-    {/* Navigation */}
-    <nav className="flex flex-1 flex-col">
-      <ul role="list" className="flex flex-1 flex-col gap-y-1">
-        {navigation.map((item) => {
-          const isActive = pathname === item.href;
-          return (
-            <li key={item.name}>
-              <Link
-                href={item.href}
-                className={`group relative flex items-center gap-x-3 rounded-xl p-2 text-sm leading-6 font-semibold transition-all ${
-                  isActive
-                    ? `bg-gradient-to-r ${item.color} text-white shadow-lg`
-                    : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
-                } ${sidebarCollapsed ? 'justify-center' : 'justify-start'}`}
-                title={sidebarCollapsed ? item.name : undefined}
+          <AnimatePresence>
+            {!sidebarCollapsed && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2 }}
+                className="flex items-center gap-x-3 px-2 py-3 rounded-xl bg-gray-800/30 border border-gray-800/50 overflow-hidden mx-1"
               >
-                <item.icon className="h-6 w-6 shrink-0" />
-                {!sidebarCollapsed && (
-                  <motion.span
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="whitespace-nowrap"
-                  >
-                    {item.name}
-                  </motion.span>
-                )}
-                {isActive && (
-                  <motion.div
-                    layoutId="active-indicator"
-                    className="absolute inset-0 rounded-xl bg-gradient-to-r opacity-20"
-                    style={{ zIndex: -1 }}
-                    transition={{ type: 'spring', bounce: 0.2 }}
-                  />
-                )}
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
-    </nav>
-
-    {/* Quick actions - hidden when collapsed */}
-    <AnimatePresence>
-      {!sidebarCollapsed && (
-        <motion.div
-          initial={{ opacity: 0, height: 0 }}
-          animate={{ opacity: 1, height: 'auto' }}
-          exit={{ opacity: 0, height: 0 }}
-          transition={{ duration: 0.2 }}
-          className="space-y-2 mt-auto pt-4"
-        >
-          <p className="text-xs font-semibold text-gray-400 px-2">QUICK ACTIONS</p>
-          <div className="grid grid-cols-2 gap-2">
-            {quickActions.map((action) => (
-              <Link
-                key={action.name}
-                href={action.href}
-                className="flex flex-col items-center gap-1 p-2 rounded-lg hover:bg-gray-800/50 transition-colors group"
-              >
-                <div className={`p-1.5 rounded-lg bg-${action.color}-500/20 group-hover:bg-${action.color}-500/30 transition-colors`}>
-                  <action.icon className={`h-4 w-4 text-${action.color}-400`} />
+                <div className="h-10 w-10 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white font-bold overflow-hidden flex-shrink-0">
+                  {avatarUrl ? (
+                    <img 
+                      key={avatarUrl}
+                      src={avatarUrl} 
+                      alt={session?.user?.name || ''} 
+                      className="h-full w-full object-cover"
+                      onError={(e) => {
+                        e.currentTarget.style.display = 'none';
+                      }}
+                    />
+                  ) : (
+                    userInitial
+                  )}
                 </div>
-                <span className="text-xs text-gray-400 group-hover:text-white transition-colors text-center">
-                  {action.name}
-                </span>
-              </Link>
-            ))}
-          </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  </div>
-</motion.div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-white truncate">{session?.user?.name || 'Admin User'}</p>
+                  <p className="text-xs text-gray-400 truncate">{session?.user?.email || 'admin@eduplace.ai'}</p>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <nav className="flex flex-1 flex-col">
+            <ul role="list" className="flex flex-1 flex-col gap-y-1">
+              {navigation.map((item) => {
+                const isActive = pathname === item.href;
+                return (
+                  <li key={item.name}>
+                    <Link
+                      href={item.href}
+                      className={`group relative flex items-center gap-x-3 rounded-xl p-2 text-sm leading-6 font-semibold transition-all ${
+                        isActive
+                          ? `bg-gradient-to-r ${item.color} text-white shadow-lg`
+                          : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
+                      } ${sidebarCollapsed ? 'justify-center' : 'justify-start'}`}
+                      title={sidebarCollapsed ? item.name : undefined}
+                    >
+                      <item.icon className="h-6 w-6 shrink-0" />
+                      {!sidebarCollapsed && (
+                        <motion.span
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          className="whitespace-nowrap"
+                        >
+                          {item.name}
+                        </motion.span>
+                      )}
+                      {isActive && (
+                        <motion.div
+                          layoutId="active-indicator"
+                          className="absolute inset-0 rounded-xl bg-gradient-to-r opacity-20"
+                          style={{ zIndex: -1 }}
+                          transition={{ type: 'spring', bounce: 0.2 }}
+                        />
+                      )}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </nav>
+
+          <AnimatePresence>
+            {!sidebarCollapsed && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2 }}
+                className="space-y-2 mt-auto pt-4"
+              >
+                <p className="text-xs font-semibold text-gray-400 px-2">QUICK ACTIONS</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {quickActions.map((action) => (
+                    <Link
+                      key={action.name}
+                      href={action.href}
+                      className="flex flex-col items-center gap-1 p-2 rounded-lg hover:bg-gray-800/50 transition-colors group"
+                    >
+                      <div className={`p-1.5 rounded-lg bg-${action.color}-500/20 group-hover:bg-${action.color}-500/30 transition-colors`}>
+                        <action.icon className={`h-4 w-4 text-${action.color}-400`} />
+                      </div>
+                      <span className="text-xs text-gray-400 group-hover:text-white transition-colors text-center">
+                        {action.name}
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </motion.div>
 
       {/* Main content */}
       <div className={`transition-all duration-200 ${sidebarCollapsed ? 'lg:pl-20' : 'lg:pl-72'}`}>
@@ -475,7 +457,6 @@ useEffect(() => {
           </button>
 
           <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
-            {/* Search */}
             <div className="relative flex flex-1 items-center">
               <div className="relative w-full max-w-lg">
                 <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-500" />
@@ -489,7 +470,6 @@ useEffect(() => {
                   placeholder="Search students, jobs, skills..."
                 />
                 
-                {/* Search results dropdown */}
                 <AnimatePresence>
                   {showSearch && searchResults.length > 0 && (
                     <motion.div
@@ -522,7 +502,6 @@ useEffect(() => {
             </div>
 
             <div className="flex items-center gap-x-4 lg:gap-x-6">
-              {/* Quick actions dropdown */}
               <Menu as="div" className="relative hidden md:block">
                 <Menu.Button className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-all">
                   <SparklesIcon className="h-5 w-5" />
@@ -559,7 +538,6 @@ useEffect(() => {
                 </Transition>
               </Menu>
 
-              {/* Notifications */}
               <Menu as="div" className="relative">
                 <Menu.Button className="relative p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-all">
                   <BellIcon className="h-5 w-5" />
@@ -646,40 +624,36 @@ useEffect(() => {
                 </Transition>
               </Menu>
 
-{/* Profile dropdown */}
-            <Menu as="div" className="relative">
-              <Menu.Button className="flex items-center gap-3 p-1.5 rounded-lg hover:bg-gray-800 transition-all group">
-                <div className="h-8 w-8 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white text-sm font-bold overflow-hidden ring-2 ring-transparent group-hover:ring-blue-500/50 transition-all">
-                  {avatarUrl ? (
-                    <img 
-                      key={avatarUrl}
-                      src={avatarUrl} 
-                      alt={session?.user?.name || ''}
-                      className="h-full w-full object-cover"
-                      onError={(e) => {
-                        console.error('Avatar load error in header');
-                        e.currentTarget.style.display = 'none';
-                        // Fallback to initials
-                        const parent = e.currentTarget.parentElement;
-                        if (parent) {
-                          parent.innerHTML = userInitial;
-                          parent.classList.add('flex', 'items-center', 'justify-center');
-                        }
-                      }}
-                    />
-                  ) : (
-                    <span className="flex items-center justify-center w-full h-full">
-                      {userInitial}
+              <Menu as="div" className="relative">
+                <Menu.Button className="flex items-center gap-3 p-1.5 rounded-lg hover:bg-gray-800 transition-all group">
+                  <div className="h-8 w-8 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 flex items-center justify-center text-white text-sm font-bold overflow-hidden ring-2 ring-transparent group-hover:ring-blue-500/50 transition-all">
+                    {avatarUrl ? (
+                      <img 
+                        key={avatarUrl}
+                        src={avatarUrl} 
+                        alt={session?.user?.name || ''}
+                        className="h-full w-full object-cover"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                          const parent = e.currentTarget.parentElement;
+                          if (parent) {
+                            parent.innerHTML = userInitial;
+                            parent.classList.add('flex', 'items-center', 'justify-center');
+                          }
+                        }}
+                      />
+                    ) : (
+                      <span className="flex items-center justify-center w-full h-full">
+                        {userInitial}
+                      </span>
+                    )}
+                  </div>
+                  <span className="hidden lg:flex lg:items-center">
+                    <span className="text-sm font-semibold text-white group-hover:text-blue-400 transition-colors">
+                      {session?.user?.name || 'Admin User'}
                     </span>
-                  )}
-                </div>
-                <span className="hidden lg:flex lg:items-center">
-                  <span className="text-sm font-semibold text-white group-hover:text-blue-400 transition-colors">
-                    {session?.user?.name || 'Admin User'}
                   </span>
-                </span>
-              </Menu.Button>
-              {/* Rest of the menu remains the same */}
+                </Menu.Button>
 
                 <Transition
                   as={Fragment}
@@ -756,6 +730,20 @@ useEffect(() => {
 
                     <Menu.Item>
                       {({ active }) => (
+                        <button
+                          onClick={refreshAvatar}
+                          className={`${
+                            active ? 'bg-gray-800' : ''
+                          } group flex w-full items-center gap-3 px-4 py-2 text-sm text-gray-300 transition-colors`}
+                        >
+                          <ArrowPathIcon className="h-5 w-5 text-gray-400" />
+                          Refresh Avatar
+                        </button>
+                      )}
+                    </Menu.Item>
+
+                    <Menu.Item>
+                      {({ active }) => (
                         <Link
                           href="/help"
                           className={`${
@@ -788,7 +776,6 @@ useEffect(() => {
           </div>
         </header>
 
-        {/* Page content */}
         <main className="py-10">
           <div className="px-4 sm:px-6 lg:px-8">
             {children}

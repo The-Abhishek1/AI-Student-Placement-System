@@ -23,11 +23,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // Initialize twoFactorSecret if it doesn't exist
-    if (!user.twoFactorSecret) {
-      user.twoFactorSecret = null;
-    }
-
     if (enabled && !user.twoFactorEnabled) {
       // Generate new secret
       const secret = speakeasy.generateSecret({

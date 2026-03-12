@@ -13,7 +13,6 @@ export async function GET() {
 
     await connectDB();
     
-    // Select all fields except password
     const user = await User.findById(session.user.id)
       .select('-password')
       .lean();
@@ -22,11 +21,13 @@ export async function GET() {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // Ensure all settings objects exist with defaults
+    // Format dates for JSON serialization
+    const formatDate = (date: any) => date ? new Date(date).toISOString() : new Date().toISOString();
+
     const response = {
       success: true,
       profile: {
-        id: user._id,
+        id: user._id.toString(),
         name: user.name || '',
         email: user.email || '',
         role: user.role || 'institution',
@@ -35,7 +36,7 @@ export async function GET() {
         bio: user.bio || '',
         phone: user.phone || '',
         department: user.department || '',
-        createdAt: user.createdAt || new Date()
+        createdAt: formatDate(user.createdAt)
       },
       notifications: {
         emailAlerts: user.notificationSettings?.emailAlerts ?? true,
@@ -49,10 +50,16 @@ export async function GET() {
       },
       security: {
         twoFactorEnabled: user.twoFactorEnabled || false,
-        lastPasswordChange: user.lastPasswordChange || new Date().toISOString(),
-        lastLogin: user.lastLogin || new Date().toISOString(),
-        loginHistory: user.loginHistory || [],
-        activeSessions: user.activeSessions || []
+        lastPasswordChange: formatDate(user.lastPasswordChange),
+        lastLogin: formatDate(user.lastLogin),
+        loginHistory: (user.loginHistory || []).map((entry: any) => ({
+          ...entry,
+          date: formatDate(entry.date)
+        })),
+        activeSessions: (user.activeSessions || []).map((session: any) => ({
+          ...session,
+          lastActive: session.lastActive ? 'Just now' : 'Unknown'
+        }))
       },
       api: {
         apiKey: user.apiKey || '',
@@ -60,7 +67,7 @@ export async function GET() {
         whitelistedIPs: user.whitelistedIPs || [],
         rateLimit: user.rateLimit || 1000,
         usageThisMonth: user.apiUsage || 0,
-        endpoints: user.apiEndpoints || [
+        endpoints: user.apiEndpoints?.length ? user.apiEndpoints : [
           { path: '/api/students', method: 'GET', calls: 0, lastCalled: 'Never' },
           { path: '/api/jobs', method: 'GET', calls: 0, lastCalled: 'Never' },
           { path: '/api/ai-match', method: 'POST', calls: 0, lastCalled: 'Never' }
@@ -74,7 +81,7 @@ export async function GET() {
         animations: user.appearance?.animations ?? true,
         sidebarCollapsed: user.appearance?.sidebarCollapsed || false
       },
-      integrations: user.integrations || [
+      integrations: user.integrations?.length ? user.integrations : [
         { id: 'linkedin', name: 'LinkedIn', description: 'Import jobs and candidates from LinkedIn', icon: '🔗', connected: false },
         { id: 'indeed', name: 'Indeed', description: 'Sync job postings from Indeed', icon: '💼', connected: false },
         { id: 'slack', name: 'Slack', description: 'Get notifications in Slack', icon: '💬', connected: false },
@@ -104,12 +111,10 @@ export async function PUT(request: Request) {
     await connectDB();
     const updates = await request.json();
 
-    // Prepare update object
     const updateData: any = {
       updatedAt: new Date()
     };
 
-    // Only update fields that are provided
     if (updates.profile) {
       updateData.name = updates.profile.name;
       updateData.email = updates.profile.email;
@@ -127,7 +132,7 @@ export async function PUT(request: Request) {
       updateData.appearance = updates.appearance;
     }
 
-    if (updates.api) {
+    if (updates.api?.whitelistedIPs) {
       updateData.whitelistedIPs = updates.api.whitelistedIPs;
     }
 
@@ -143,8 +148,7 @@ export async function PUT(request: Request) {
 
     return NextResponse.json({
       success: true,
-      message: 'Settings updated successfully',
-      user
+      message: 'Settings updated successfully'
     });
   } catch (error) {
     console.error('Update settings error:', error);

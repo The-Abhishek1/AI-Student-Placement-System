@@ -72,7 +72,7 @@ export interface IUser extends mongoose.Document {
 const UserSchema = new mongoose.Schema({
   name: { type: String, required: true },
   email: { type: String, required: true, unique: true },
-  password: { type: String, required: true, select: false },
+  password: { type: String, required: true, select: false }, // select: false is important
   role: { type: String, enum: ['admin', 'institution', 'student'], default: 'institution' },
   institution: { type: String },
   avatar: { type: String },
@@ -80,7 +80,6 @@ const UserSchema = new mongoose.Schema({
   phone: { type: String },
   department: { type: String },
   
-  // Security
   twoFactorEnabled: { type: Boolean, default: false },
   twoFactorSecret: { type: String, select: false },
   lastPasswordChange: { type: Date, default: Date.now },
@@ -98,7 +97,6 @@ const UserSchema = new mongoose.Schema({
     lastActive: { type: Date, default: Date.now }
   }],
   
-  // API
   apiKey: { type: String, unique: true, sparse: true },
   apiSecret: { type: String, select: false },
   whitelistedIPs: [{ type: String }],
@@ -111,7 +109,6 @@ const UserSchema = new mongoose.Schema({
     lastCalled: Date
   }],
   
-  // Preferences
   notificationSettings: {
     emailAlerts: { type: Boolean, default: true },
     matchUpdates: { type: Boolean, default: true },
@@ -158,14 +155,23 @@ const UserSchema = new mongoose.Schema({
 UserSchema.pre('save', async function(next) {
   if (!this.isModified('password')) return next();
   
-  const salt = await bcrypt.genSalt(10);
-  this.password = await bcrypt.hash(this.password, salt);
-  next();
+  try {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+  } catch (error) {
+    next(error as Error);
+  }
 });
 
 // Compare password method
 UserSchema.methods.comparePassword = async function(candidatePassword: string): Promise<boolean> {
-  return bcrypt.compare(candidatePassword, this.password);
+  try {
+    return await bcrypt.compare(candidatePassword, this.password);
+  } catch (error) {
+    return false;
+  }
 };
 
+// Don't recompile the model if it already exists
 export default mongoose.models.User || mongoose.model<IUser>('User', UserSchema);

@@ -25,7 +25,14 @@ import {
   LinkIcon,
   EyeIcon,
   EyeSlashIcon,
-  CameraIcon
+  CameraIcon,
+  TrashIcon,
+  PlusIcon,
+  WifiIcon,
+  ServerIcon,
+  ClockIcon,
+  MapPinIcon,
+  FingerPrintIcon
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
@@ -57,6 +64,9 @@ interface NotificationSettings {
 
 interface SecuritySettings {
   twoFactorEnabled: boolean;
+  twoFactorQR?: string;
+  twoFactorSecret?: string;
+  verificationCode?: string;
   lastPasswordChange: string;
   lastLogin: string;
   loginHistory: Array<{
@@ -112,10 +122,13 @@ export default function SettingsPage() {
   const { data: session, update } = useSession();
   const [activeSection, setActiveSection] = useState('profile');
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
+  const [showApiSecret, setShowApiSecret] = useState(false);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Profile State
@@ -147,47 +160,35 @@ export default function SettingsPage() {
   // Security Settings
   const [security, setSecurity] = useState<SecuritySettings>({
     twoFactorEnabled: false,
-    lastPasswordChange: '2024-01-15',
-    lastLogin: new Date().toISOString(),
-    loginHistory: [
-      {
-        date: new Date().toISOString(),
-        ip: '192.168.1.1',
-        device: 'Chrome on Windows',
-        location: 'New York, US'
-      },
-      {
-        date: new Date(Date.now() - 86400000).toISOString(),
-        ip: '192.168.1.1',
-        device: 'Firefox on Windows',
-        location: 'New York, US'
-      }
-    ],
-    activeSessions: [
-      {
-        id: '1',
-        device: 'Windows PC',
-        browser: 'Chrome 120.0',
-        location: 'New York, US',
-        lastActive: 'Just now',
-        current: true
-      }
-    ]
+    lastPasswordChange: '',
+    lastLogin: '',
+    loginHistory: [],
+    activeSessions: []
   });
+
+  // Password change state
+  const [passwordData, setPasswordData] = useState({
+    current: '',
+    new: '',
+    confirm: ''
+  });
+
+  // 2FA state
+  const [show2FASetup, setShow2FASetup] = useState(false);
+  const [twoFactorCode, setTwoFactorCode] = useState('');
 
   // API Configuration
   const [apiConfig, setApiConfig] = useState<APIConfig>({
-    apiKey: 'sk_live_' + Math.random().toString(36).substring(2, 15),
-    apiSecret: Math.random().toString(36).substring(2, 30),
-    whitelistedIPs: ['192.168.1.1', '10.0.0.1'],
+    apiKey: '',
+    apiSecret: '',
+    whitelistedIPs: [],
     rateLimit: 1000,
-    usageThisMonth: 342,
-    endpoints: [
-      { path: '/api/students', method: 'GET', calls: 1250, lastCalled: '2 mins ago' },
-      { path: '/api/jobs', method: 'GET', calls: 890, lastCalled: '5 mins ago' },
-      { path: '/api/ai-match', method: 'POST', calls: 156, lastCalled: '1 hour ago' }
-    ]
+    usageThisMonth: 0,
+    endpoints: []
   });
+
+  // New IP input
+  const [newIP, setNewIP] = useState('');
 
   // Appearance Settings
   const [appearance, setAppearance] = useState<AppearanceSettings>({
@@ -200,104 +201,62 @@ export default function SettingsPage() {
   });
 
   // Integrations
-  const [integrations, setIntegrations] = useState<Integration[]>([
-    {
-      id: 'linkedin',
-      name: 'LinkedIn',
-      description: 'Import jobs and candidates from LinkedIn',
-      icon: '🔗',
-      connected: false
-    },
-    {
-      id: 'indeed',
-      name: 'Indeed',
-      description: 'Sync job postings from Indeed',
-      icon: '💼',
-      connected: false
-    },
-    {
-      id: 'slack',
-      name: 'Slack',
-      description: 'Get notifications in Slack',
-      icon: '💬',
-      connected: true,
-      lastSync: '2 hours ago',
-      config: { channel: '#placement-updates' }
-    },
-    {
-      id: 'google-calendar',
-      name: 'Google Calendar',
-      description: 'Schedule interviews automatically',
-      icon: '📅',
-      connected: false
-    },
-    {
-      id: 'zoom',
-      name: 'Zoom',
-      description: 'Create interview meetings',
-      icon: '🎥',
-      connected: true,
-      lastSync: '1 day ago',
-      config: { defaultDuration: 60 }
-    },
-    {
-      id: 'salesforce',
-      name: 'Salesforce',
-      description: 'Sync placement data with CRM',
-      icon: '☁️',
-      connected: false
+  const [integrations, setIntegrations] = useState<Integration[]>([]);
+
+  useEffect(() => {
+    if (session?.user?.id) {
+      fetchUserSettings();
+      check2FAStatus();
     }
-  ]);
+  }, [session]);
 
-  // Password change state
-  const [passwordData, setPasswordData] = useState({
-    current: '',
-    new: '',
-    confirm: ''
-  });
-
-  // New IP input
-  const [newIP, setNewIP] = useState('');
-
-useEffect(() => {
-  if (session?.user?.id) {
-    fetchUserSettings();
-  }
-}, [session]);
-
-const fetchUserSettings = async () => {
-  try {
-    setLoading(true);
-    const res = await fetch('/api/user/settings');
-    const data = await res.json();
-    
-    if (data.success) {
-      setProfile(data.profile);
-      setNotifications(data.notifications);
-      setSecurity(data.security);
-      setApiConfig(data.api);
-      setAppearance(data.appearance);
-      setIntegrations(data.integrations);
-    } else {
-      toast.error(data.error || 'Failed to load settings');
+  const fetchUserSettings = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch('/api/user/settings');
+      const data = await res.json();
+      
+      if (data.success) {
+        setProfile(data.profile);
+        setNotifications(data.notifications);
+        setSecurity(data.security);
+        setApiConfig(data.api);
+        setAppearance(data.appearance);
+        setIntegrations(data.integrations);
+      } else {
+        toast.error(data.error || 'Failed to load settings');
+      }
+    } catch (error) {
+      console.error('Fetch settings error:', error);
+      toast.error('Error loading settings');
+    } finally {
+      setLoading(false);
     }
-  } catch (error) {
-    console.error('Fetch settings error:', error);
-    toast.error('Error loading settings');
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
-// Add a refresh button in the header
-const handleRefresh = () => {
-  fetchUserSettings();
-  toast.success('Settings refreshed');
-};
+  const check2FAStatus = async () => {
+    try {
+      const res = await fetch('/api/user/2fa');
+      const data = await res.json();
+      if (data.success) {
+        setSecurity(prev => ({ ...prev, twoFactorEnabled: data.twoFactorEnabled }));
+      }
+    } catch (error) {
+      console.error('2FA status check error:', error);
+    }
+  };
 
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error('File size must be less than 5MB');
+        return;
+      }
+      if (!file.type.startsWith('image/')) {
+        toast.error('File must be an image');
+        return;
+      }
       setAvatarFile(file);
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -314,6 +273,7 @@ const handleRefresh = () => {
     formData.append('avatar', avatarFile);
 
     try {
+      setAvatarUploading(true);
       const res = await fetch('/api/user/avatar', {
         method: 'POST',
         body: formData
@@ -326,18 +286,21 @@ const handleRefresh = () => {
         setProfile({ ...profile, avatar: data.url });
         setAvatarPreview(null);
         setAvatarFile(null);
+        await update();
       } else {
         toast.error(data.error || 'Failed to upload avatar');
       }
     } catch (error) {
       console.error('Upload error:', error);
       toast.error('Failed to upload avatar');
+    } finally {
+      setAvatarUploading(false);
     }
   };
 
   const updateProfile = async () => {
     try {
-      setLoading(true);
+      setSaving(true);
       const res = await fetch('/api/user/profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -346,23 +309,36 @@ const handleRefresh = () => {
       const data = await res.json();
       if (data.success) {
         toast.success('Profile updated successfully');
-        await update(); // Update session
+        await update();
+      } else {
+        toast.error(data.error || 'Failed to update profile');
       }
     } catch (error) {
+      console.error('Profile update error:', error);
       toast.error('Failed to update profile');
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
   const changePassword = async () => {
+    if (!passwordData.current || !passwordData.new || !passwordData.confirm) {
+      toast.error('All fields are required');
+      return;
+    }
+
     if (passwordData.new !== passwordData.confirm) {
-      toast.error('Passwords do not match');
+      toast.error('New passwords do not match');
+      return;
+    }
+
+    if (passwordData.new.length < 8) {
+      toast.error('Password must be at least 8 characters');
       return;
     }
 
     try {
-      setLoading(true);
+      setSaving(true);
       const res = await fetch('/api/user/password', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -372,56 +348,147 @@ const handleRefresh = () => {
       if (data.success) {
         toast.success('Password changed successfully');
         setPasswordData({ current: '', new: '', confirm: '' });
+      } else {
+        toast.error(data.error || 'Failed to change password');
       }
     } catch (error) {
+      console.error('Password change error:', error);
       toast.error('Failed to change password');
     } finally {
-      setLoading(false);
+      setSaving(false);
+    }
+  };
+
+  const setup2FA = async () => {
+    try {
+      setSaving(true);
+      const res = await fetch('/api/user/2fa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: true })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSecurity(prev => ({
+          ...prev,
+          twoFactorQR: data.qrCode,
+          twoFactorSecret: data.secret
+        }));
+        setShow2FASetup(true);
+      } else {
+        toast.error(data.error || 'Failed to setup 2FA');
+      }
+    } catch (error) {
+      console.error('2FA setup error:', error);
+      toast.error('Failed to setup 2FA');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const verify2FA = async () => {
+    if (!twoFactorCode) {
+      toast.error('Please enter verification code');
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const res = await fetch('/api/user/2fa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: true, token: twoFactorCode })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success('2FA enabled successfully');
+        setSecurity(prev => ({ ...prev, twoFactorEnabled: true }));
+        setShow2FASetup(false);
+        setTwoFactorCode('');
+      } else {
+        toast.error(data.error || 'Invalid verification code');
+      }
+    } catch (error) {
+      console.error('2FA verification error:', error);
+      toast.error('Failed to verify code');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const disable2FA = async () => {
+    try {
+      setSaving(true);
+      const res = await fetch('/api/user/2fa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: false })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success('2FA disabled');
+        setSecurity(prev => ({ ...prev, twoFactorEnabled: false }));
+      } else {
+        toast.error(data.error || 'Failed to disable 2FA');
+      }
+    } catch (error) {
+      console.error('2FA disable error:', error);
+      toast.error('Failed to disable 2FA');
+    } finally {
+      setSaving(false);
     }
   };
 
   const regenerateApiKey = async () => {
-    if (!confirm('Are you sure? This will invalidate your current API key.')) return;
+    if (!confirm('Are you sure? This will invalidate your current API key and secret.')) return;
 
     try {
+      setSaving(true);
       const res = await fetch('/api/user/api-key', {
         method: 'POST'
       });
       const data = await res.json();
       if (data.success) {
-        setApiConfig({ ...apiConfig, apiKey: data.key, apiSecret: data.secret });
+        setApiConfig({
+          ...apiConfig,
+          apiKey: data.key,
+          apiSecret: '••••••••••••••••'
+        });
         toast.success('API key regenerated');
+      } else {
+        toast.error(data.error || 'Failed to regenerate API key');
       }
     } catch (error) {
+      console.error('API key regeneration error:', error);
       toast.error('Failed to regenerate API key');
-    }
-  };
-
-  const toggleTwoFactor = async () => {
-    try {
-      const res = await fetch('/api/user/2fa', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled: !security.twoFactorEnabled })
-      });
-      if (res.ok) {
-        setSecurity({ ...security, twoFactorEnabled: !security.twoFactorEnabled });
-        toast.success(`2FA ${!security.twoFactorEnabled ? 'enabled' : 'disabled'}`);
-      }
-    } catch (error) {
-      toast.error('Failed to toggle 2FA');
+    } finally {
+      setSaving(false);
     }
   };
 
   const addWhitelistedIP = () => {
-    if (newIP && !apiConfig.whitelistedIPs.includes(newIP)) {
-      setApiConfig({
-        ...apiConfig,
-        whitelistedIPs: [...apiConfig.whitelistedIPs, newIP]
-      });
-      setNewIP('');
-      toast.success('IP added to whitelist');
+    if (!newIP) {
+      toast.error('Please enter an IP address');
+      return;
     }
+
+    const ipRegex = /^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+    if (!ipRegex.test(newIP) && newIP !== '::1' && newIP !== '127.0.0.1') {
+      toast.error('Please enter a valid IP address');
+      return;
+    }
+
+    if (apiConfig.whitelistedIPs.includes(newIP)) {
+      toast.error('IP already in whitelist');
+      return;
+    }
+
+    setApiConfig({
+      ...apiConfig,
+      whitelistedIPs: [...apiConfig.whitelistedIPs, newIP]
+    });
+    setNewIP('');
+    toast.success('IP added to whitelist');
   };
 
   const removeWhitelistedIP = (ip: string) => {
@@ -436,29 +503,43 @@ const handleRefresh = () => {
     setIntegrations(integrations.map(i => 
       i.id === integrationId ? { ...i, connected: !i.connected } : i
     ));
-    toast.success(`Integration ${integrations.find(i => i.id === integrationId)?.connected ? 'disconnected' : 'connected'}`);
+    toast.success(
+      `${integrations.find(i => i.id === integrationId)?.name} ${
+        integrations.find(i => i.id === integrationId)?.connected ? 'disconnected' : 'connected'
+      }`
+    );
   };
 
   const saveAllSettings = async () => {
     try {
-      setLoading(true);
+      setSaving(true);
       const res = await fetch('/api/user/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           profile,
           notifications,
-          appearance
+          appearance,
+          api: { whitelistedIPs: apiConfig.whitelistedIPs }
         })
       });
-      if (res.ok) {
+      const data = await res.json();
+      if (data.success) {
         toast.success('All settings saved');
+      } else {
+        toast.error(data.error || 'Failed to save settings');
       }
     } catch (error) {
+      console.error('Save settings error:', error);
       toast.error('Failed to save settings');
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
+  };
+
+  const handleRefresh = () => {
+    fetchUserSettings();
+    toast.success('Settings refreshed');
   };
 
   const sections = [
@@ -498,22 +579,24 @@ const handleRefresh = () => {
                 Manage your account preferences and system configuration
               </p>
             </div>
-            <button
-              onClick={saveAllSettings}
-              disabled={loading}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
-            >
-              <CheckCircleIcon className="h-5 w-5" />
-              <span>Save All Changes</span>
-            </button>
-            {/* In the header section, add this next to the Save button */}
-            <button
-              onClick={handleRefresh}
-              className="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
-            >
-              <ArrowPathIcon className="h-5 w-5" />
-              <span>Refresh</span>
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={handleRefresh}
+                disabled={loading}
+                className="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
+              >
+                <ArrowPathIcon className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
+                <span>Refresh</span>
+              </button>
+              <button
+                onClick={saveAllSettings}
+                disabled={saving}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors disabled:opacity-50"
+              >
+                <CheckCircleIcon className="h-5 w-5" />
+                <span>{saving ? 'Saving...' : 'Save All Changes'}</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -567,12 +650,13 @@ const handleRefresh = () => {
                           ) : profile.avatar ? (
                             <img src={profile.avatar} alt={profile.name} className="h-full w-full object-cover" />
                           ) : (
-                            profile.name?.charAt(0) || 'U'
+                            profile.name?.charAt(0)?.toUpperCase() || 'U'
                           )}
                         </div>
                         <button
                           onClick={() => fileInputRef.current?.click()}
-                          className="absolute bottom-0 right-0 h-8 w-8 bg-gray-800 rounded-full border-2 border-gray-900 flex items-center justify-center hover:bg-gray-700 transition-colors"
+                          disabled={avatarUploading}
+                          className="absolute bottom-0 right-0 h-8 w-8 bg-gray-800 rounded-full border-2 border-gray-900 flex items-center justify-center hover:bg-gray-700 transition-colors disabled:opacity-50"
                         >
                           <CameraIcon className="h-4 w-4 text-gray-300" />
                         </button>
@@ -588,9 +672,10 @@ const handleRefresh = () => {
                         <div className="flex space-x-2">
                           <button
                             onClick={uploadAvatar}
-                            className="px-3 py-1 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
+                            disabled={avatarUploading}
+                            className="px-3 py-1 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 disabled:opacity-50"
                           >
-                            Upload
+                            {avatarUploading ? 'Uploading...' : 'Upload'}
                           </button>
                           <button
                             onClick={() => {
@@ -679,10 +764,10 @@ const handleRefresh = () => {
 
                     <button
                       onClick={updateProfile}
-                      disabled={loading}
-                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                      disabled={saving}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
                     >
-                      Update Profile
+                      {saving ? 'Updating...' : 'Update Profile'}
                     </button>
                   </div>
                 )}
@@ -773,6 +858,22 @@ const handleRefresh = () => {
                         </label>
                       </div>
 
+                      <div className="flex items-center justify-between py-3 border-b border-gray-800">
+                        <div>
+                          <p className="text-white font-medium">Mobile Notifications</p>
+                          <p className="text-sm text-gray-400">Receive push notifications on your phone</p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={notifications.mobileNotifications}
+                            onChange={(e) => setNotifications({ ...notifications, mobileNotifications: e.target.checked })}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        </label>
+                      </div>
+
                       <div>
                         <label className="block text-sm text-gray-400 mb-2">Digest Frequency</label>
                         <select
@@ -836,9 +937,10 @@ const handleRefresh = () => {
                         />
                         <button
                           onClick={changePassword}
-                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                          disabled={saving}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
                         >
-                          Change Password
+                          {saving ? 'Changing...' : 'Change Password'}
                         </button>
                       </div>
                     </div>
@@ -850,43 +952,84 @@ const handleRefresh = () => {
                           <h3 className="text-white font-medium">Two-Factor Authentication</h3>
                           <p className="text-sm text-gray-400">Add an extra layer of security to your account</p>
                         </div>
-                        <button
-                          onClick={toggleTwoFactor}
-                          className={`px-4 py-2 rounded-lg transition-colors ${
-                            security.twoFactorEnabled
-                              ? 'bg-green-600 hover:bg-green-700'
-                              : 'bg-gray-800 hover:bg-gray-700'
-                          } text-white`}
-                        >
-                          {security.twoFactorEnabled ? 'Disable' : 'Enable'} 2FA
-                        </button>
+                        {security.twoFactorEnabled ? (
+                          <button
+                            onClick={disable2FA}
+                            disabled={saving}
+                            className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
+                          >
+                            Disable 2FA
+                          </button>
+                        ) : (
+                          <button
+                            onClick={setup2FA}
+                            disabled={saving}
+                            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                          >
+                            Enable 2FA
+                          </button>
+                        )}
                       </div>
+
+                      {/* 2FA Setup Modal */}
+                      {show2FASetup && security.twoFactorQR && (
+                        <div className="mt-4 p-4 bg-gray-800/50 rounded-lg border border-gray-700">
+                          <h4 className="text-white font-medium mb-3">Setup Two-Factor Authentication</h4>
+                          <div className="flex flex-col items-center space-y-4">
+                            <img src={security.twoFactorQR} alt="2FA QR Code" className="w-48 h-48" />
+                            <p className="text-sm text-gray-400">
+                              Scan this QR code with Google Authenticator or enter the secret manually:
+                            </p>
+                            <code className="text-xs bg-gray-900 p-2 rounded">
+                              {security.twoFactorSecret}
+                            </code>
+                            <div className="flex space-x-2 w-full">
+                              <input
+                                type="text"
+                                placeholder="Enter verification code"
+                                value={twoFactorCode}
+                                onChange={(e) => setTwoFactorCode(e.target.value)}
+                                className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white"
+                              />
+                              <button
+                                onClick={verify2FA}
+                                disabled={saving}
+                                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                              >
+                                Verify
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     {/* Active Sessions */}
-                    <div className="pt-4 border-t border-gray-800">
-                      <h3 className="text-white font-medium mb-3">Active Sessions</h3>
-                      <div className="space-y-3">
-                        {security.activeSessions.map((session) => (
-                          <div key={session.id} className="bg-gray-800/50 rounded-lg p-3">
-                            <div className="flex justify-between items-start">
-                              <div>
-                                <p className="text-white text-sm">
-                                  {session.device} - {session.browser}
-                                </p>
-                                <p className="text-xs text-gray-400 mt-1">{session.location}</p>
-                              </div>
-                              <div className="text-right">
-                                <span className="text-xs text-gray-400">{session.lastActive}</span>
-                                {session.current && (
-                                  <span className="ml-2 text-xs text-green-400">Current</span>
-                                )}
+                    {security.activeSessions.length > 0 && (
+                      <div className="pt-4 border-t border-gray-800">
+                        <h3 className="text-white font-medium mb-3">Active Sessions</h3>
+                        <div className="space-y-3">
+                          {security.activeSessions.map((session) => (
+                            <div key={session.id} className="bg-gray-800/50 rounded-lg p-3">
+                              <div className="flex justify-between items-start">
+                                <div>
+                                  <p className="text-white text-sm">
+                                    {session.device} - {session.browser}
+                                  </p>
+                                  <p className="text-xs text-gray-400 mt-1">{session.location}</p>
+                                </div>
+                                <div className="text-right">
+                                  <span className="text-xs text-gray-400">{session.lastActive}</span>
+                                  {session.current && (
+                                    <span className="ml-2 text-xs text-green-400">Current</span>
+                                  )}
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 )}
 
@@ -903,7 +1046,7 @@ const handleRefresh = () => {
                           <div className="flex-1 relative">
                             <input
                               type={showApiKey ? 'text' : 'password'}
-                              value={apiConfig.apiKey}
+                              value={apiConfig.apiKey || 'Not configured'}
                               readOnly
                               className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white font-mono"
                             />
@@ -918,42 +1061,51 @@ const handleRefresh = () => {
                               )}
                             </button>
                           </div>
-                          <button
-                            onClick={() => {
-                              navigator.clipboard.writeText(apiConfig.apiKey);
-                              toast.success('API key copied');
-                            }}
-                            className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700"
-                          >
-                            Copy
-                          </button>
+                          {apiConfig.apiKey && (
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(apiConfig.apiKey);
+                                toast.success('API key copied');
+                              }}
+                              className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700"
+                            >
+                              Copy
+                            </button>
+                          )}
                         </div>
                       </div>
 
                       <div>
                         <label className="block text-sm text-gray-400 mb-2">API Secret</label>
                         <div className="flex space-x-2">
-                          <input
-                            type="password"
-                            value={apiConfig.apiSecret}
-                            readOnly
-                            className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white font-mono"
-                          />
-                          <button
-                            onClick={() => {
-                              navigator.clipboard.writeText(apiConfig.apiSecret);
-                              toast.success('API secret copied');
-                            }}
-                            className="px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-700"
-                          >
-                            Copy
-                          </button>
+                          <div className="flex-1 relative">
+                            <input
+                              type={showApiSecret ? 'text' : 'password'}
+                              value={apiConfig.apiSecret ? '••••••••••••••••' : 'Not configured'}
+                              readOnly
+                              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white font-mono"
+                            />
+                            <button
+                              onClick={() => setShowApiSecret(!showApiSecret)}
+                              className="absolute right-3 top-1/2 transform -translate-y-1/2"
+                            >
+                              {showApiSecret ? (
+                                <EyeSlashIcon className="h-5 w-5 text-gray-500" />
+                              ) : (
+                                <EyeIcon className="h-5 w-5 text-gray-500" />
+                              )}
+                            </button>
+                          </div>
                         </div>
+                        <p className="text-xs text-gray-500 mt-1">
+                          API secret is hidden for security. Regenerate to get a new one.
+                        </p>
                       </div>
 
                       <button
                         onClick={regenerateApiKey}
-                        className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700"
+                        disabled={saving}
+                        className="px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 disabled:opacity-50"
                       >
                         Regenerate API Key
                       </button>
@@ -1087,7 +1239,7 @@ const handleRefresh = () => {
                       <select
                         value={appearance.fontSize}
                         onChange={(e) => setAppearance({ ...appearance, fontSize: e.target.value as any })}
-                        className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white"
+                        className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
                         <option value="small">Small</option>
                         <option value="medium">Medium</option>
@@ -1123,6 +1275,22 @@ const handleRefresh = () => {
                             type="checkbox"
                             checked={appearance.animations}
                             onChange={(e) => setAppearance({ ...appearance, animations: e.target.checked })}
+                            className="sr-only peer"
+                          />
+                          <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                        </label>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-white font-medium">Sidebar Collapsed</p>
+                          <p className="text-sm text-gray-400">Minimize sidebar by default</p>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={appearance.sidebarCollapsed}
+                            onChange={(e) => setAppearance({ ...appearance, sidebarCollapsed: e.target.checked })}
                             className="sr-only peer"
                           />
                           <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
@@ -1180,11 +1348,31 @@ const handleRefresh = () => {
                         </div>
                       ))}
                     </div>
+
+                    {/* Coming Soon Integrations */}
+                    <div className="mt-6 p-4 bg-blue-900/20 rounded-lg border border-blue-800">
+                      <h3 className="text-blue-400 font-medium mb-2">More Integrations Coming Soon</h3>
+                      <p className="text-sm text-gray-400">
+                        We're working on integrating with more platforms including:
+                      </p>
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        <span className="px-3 py-1 bg-gray-800 text-gray-300 rounded-full text-xs">GitHub</span>
+                        <span className="px-3 py-1 bg-gray-800 text-gray-300 rounded-full text-xs">Microsoft Teams</span>
+                        <span className="px-3 py-1 bg-gray-800 text-gray-300 rounded-full text-xs">Discord</span>
+                        <span className="px-3 py-1 bg-gray-800 text-gray-300 rounded-full text-xs">Zoom</span>
+                        <span className="px-3 py-1 bg-gray-800 text-gray-300 rounded-full text-xs">Google Meet</span>
+                      </div>
+                    </div>
                   </div>
                 )}
               </motion.div>
             </AnimatePresence>
           </div>
+        </div>
+
+        {/* Footer with last updated timestamp */}
+        <div className="text-center text-xs text-gray-600">
+          Last updated: {new Date().toLocaleString()}
         </div>
       </div>
     </DashboardLayout>

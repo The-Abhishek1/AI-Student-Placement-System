@@ -20,21 +20,27 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
+      console.log('Attempting login with:', formData.email);
+      
       const result = await signIn('credentials', {
         email: formData.email,
         password: formData.password,
-        redirect: false
+        redirect: false,
+        callbackUrl: '/'
       });
 
+      console.log('SignIn result:', result);
+
       if (result?.error) {
+        console.error('Login error:', result.error);
         toast.error('Invalid email or password');
-      } else {
+      } else if (result?.ok) {
         toast.success('Login successful!');
         router.push('/');
         router.refresh();
       }
     } catch (error) {
-      console.error('Login error:', error);
+      console.error('Login exception:', error);
       toast.error('Something went wrong');
     } finally {
       setLoading(false);
@@ -65,6 +71,7 @@ export default function LoginPage() {
                 className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-10 pr-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="admin@eduplace.ai"
                 required
+                disabled={loading}
               />
             </div>
           </div>
@@ -80,6 +87,7 @@ export default function LoginPage() {
                 className="w-full bg-gray-800 border border-gray-700 rounded-lg pl-10 pr-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="••••••••"
                 required
+                disabled={loading}
               />
             </div>
           </div>
@@ -87,7 +95,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg transition-colors disabled:opacity-50"
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? 'Signing in...' : 'Sign In'}
           </button>

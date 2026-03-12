@@ -2,7 +2,6 @@ import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
 import * as dotenv from 'dotenv';
 
-// Load environment variables
 dotenv.config({ path: '.env.local' });
 
 const MONGODB_URI = process.env.MONGODB_URI;
@@ -12,7 +11,6 @@ if (!MONGODB_URI) {
   process.exit(1);
 }
 
-// Define schemas
 const UserSchema = new mongoose.Schema({
   name: String,
   email: String,
@@ -60,13 +58,15 @@ async function seed() {
     await mongoose.connection.dropDatabase();
     console.log('🗑️ Database cleared');
 
-    // Create models
     const User = mongoose.model('User', UserSchema);
     const Student = mongoose.model('Student', StudentSchema);
     const Job = mongoose.model('Job', JobSchema);
 
-    // Create admin user
-    const hashedPassword = await bcrypt.hash('admin123', 10);
+    // Hash password properly
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash('admin123', salt);
+    
+    console.log('Creating admin user with hashed password...');
     
     const admin = await User.create({
       name: 'Admin User',
@@ -77,6 +77,7 @@ async function seed() {
     });
 
     console.log('✅ Admin user created:', admin.email);
+    console.log('Password hash:', hashedPassword.substring(0, 20) + '...');
 
     // Create sample students
     const students = await Student.create([
@@ -199,9 +200,9 @@ async function seed() {
         location: 'Mountain View, CA',
         remote: false,
         salary: { min: 150000, max: 220000, currency: 'USD' },
-        description: 'Looking for an experienced software engineer to join our team. You will work on core products used by millions of users worldwide.',
-        requirements: ['5+ years experience', 'Strong system design skills', 'Bachelor\'s in CS or related field'],
-        skills: ['Python', 'Java', 'System Design', 'Cloud', 'Distributed Systems'],
+        description: 'Looking for an experienced software engineer to join our team...',
+        requirements: ['5+ years experience', 'Strong system design skills'],
+        skills: ['Python', 'Java', 'System Design', 'Cloud'],
         type: 'fulltime',
         postedBy: admin._id,
         postedDate: new Date(),
@@ -213,9 +214,9 @@ async function seed() {
         location: 'Redmond, WA',
         remote: true,
         salary: { min: 140000, max: 200000, currency: 'USD' },
-        description: 'Join our AI research team to work on cutting-edge machine learning models and applications.',
-        requirements: ['MS or PhD in CS/ML', 'Experience with deep learning', 'Publications preferred'],
-        skills: ['Python', 'Machine Learning', 'SQL', 'TensorFlow', 'PyTorch'],
+        description: 'Join our AI research team...',
+        requirements: ['ML experience', 'PhD preferred'],
+        skills: ['Python', 'Machine Learning', 'SQL', 'TensorFlow'],
         type: 'fulltime',
         postedBy: admin._id,
         postedDate: new Date(),
@@ -223,13 +224,13 @@ async function seed() {
       },
       {
         title: 'Security Analyst',
-        company: 'Amazon Web Services',
+        company: 'AWS',
         location: 'Seattle, WA',
         remote: true,
         salary: { min: 120000, max: 180000, currency: 'USD' },
-        description: 'Protect AWS infrastructure and services from security threats. Conduct security assessments and incident response.',
-        requirements: ['Security certifications', 'Experience with cloud security', 'Incident response skills'],
-        skills: ['Network Security', 'AWS', 'Python', 'Incident Response', 'Compliance'],
+        description: 'Protect AWS infrastructure...',
+        requirements: ['Security certifications', 'Cloud security'],
+        skills: ['Network Security', 'AWS', 'Python'],
         type: 'fulltime',
         postedBy: admin._id,
         postedDate: new Date(),
@@ -243,13 +244,11 @@ async function seed() {
     console.log('\n📝 Login credentials:');
     console.log('   Email: admin@eduplace.ai');
     console.log('   Password: admin123');
-    console.log('\n👥 Sample students created:');
-    students.forEach(s => console.log(`   - ${s.name} (${s.department})`));
-    console.log('\n💼 Sample jobs created:');
-    jobs.forEach(j => console.log(`   - ${j.title} at ${j.company}`));
+    console.log('\n👥 Sample students created:', students.length);
+    console.log('💼 Sample jobs created:', jobs.length);
 
     await mongoose.disconnect();
-    console.log('\n👋 Disconnected from MongoDB');
+    console.log('👋 Disconnected from MongoDB');
     process.exit(0);
   } catch (error) {
     console.error('❌ Seed error:', error);

@@ -3,11 +3,12 @@ import { getServerSession } from 'next-auth';
 import connectDB from '@/app/lib/db/mongodb';
 import Student from '@/app/lib/db/models/Student';
 import { NotificationService } from '@/app/lib/notifications/notificationService';
+import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 
 export async function GET(request: Request) {
   try {
-    const session = await getServerSession();
-    if (!session) {
+    const session = await getServerSession(authOptions);
+    if (!session || !session.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -33,16 +34,10 @@ export async function GET(request: Request) {
       .sort({ createdAt: -1 })
       .lean();
 
-    // Calculate match scores for each student (simple algorithm for now)
-    const studentsWithScores = students.map(student => ({
-      ...student,
-      matchScore: student.matchScore || Math.floor(Math.random() * 30) + 70 // Temporary random score between 70-100
-    }));
-
     return NextResponse.json({
       success: true,
-      students: studentsWithScores,
-      count: studentsWithScores.length
+      students,
+      count: students.length
     });
   } catch (error) {
     console.error('Fetch students error:', error);
@@ -55,15 +50,21 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const session = await getServerSession();
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const session = await getServerSession(authOptions);
+    if (!session || !session.user) {
+      console.log('No session found');
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized - Please login first' },
+        { status: 401 }
+      );
     }
+
+    console.log('Session user:', session.user);
 
     await connectDB();
     const studentData = await request.json();
 
-    console.log('Received student data:', studentData); // Debug log
+    console.log('Received student data:', studentData);
 
     // Validate required fields
     if (!studentData.name || !studentData.email || !studentData.department) {
@@ -88,11 +89,11 @@ export async function POST(request: Request) {
       );
     }
 
-    // Prepare student data with defaults
+    // Prepare student data with defaults and session user ID
     const newStudent = {
-      name: studentData.name,
-      email: studentData.email,
-      department: studentData.department,
+      name: studentData.name.trim(),
+      email: studentData.email.trim().toLowerCase(),
+      department: studentData.department.trim(),
       graduationYear: studentData.graduationYear || new Date().getFullYear(),
       skills: studentData.skills || [],
       experience: studentData.experience || [],
@@ -107,12 +108,12 @@ export async function POST(request: Request) {
       },
       matchScore: studentData.matchScore || 0,
       status: studentData.status || 'active',
-      createdBy: session.user.id,
+      createdBy: session.user.id, // This is now properly set from session
       createdAt: new Date(),
       updatedAt: new Date()
     };
 
-    console.log('Creating student:', newStudent); // Debug log
+    console.log('Creating student with createdBy:', session.user.id);
 
     const student = await Student.create(newStudent);
 
@@ -171,6 +172,8 @@ export async function POST(request: Request) {
     );
   }
 }
+
+
 
 export async function DELETE(request: Request) {
   try {

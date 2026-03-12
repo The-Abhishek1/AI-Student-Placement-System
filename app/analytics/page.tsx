@@ -4,12 +4,15 @@ import { useState, useEffect } from 'react';
 import DashboardLayout from '../components/DashboardLayout';
 import {
   ChartBarIcon,
-  ArrowTrendingUpIcon, // Changed from TrendingUpIcon
+  ArrowTrendingUpIcon,
   UserGroupIcon,
   AcademicCapIcon,
   BriefcaseIcon,
+  BuildingOfficeIcon,
+  CurrencyDollarIcon,
+  ClockIcon,
   CalendarIcon,
-  BuildingOfficeIcon // Added for company stats
+  DocumentTextIcon
 } from '@heroicons/react/24/outline';
 import {
   LineChart,
@@ -26,40 +29,126 @@ import {
   Legend,
   ResponsiveContainer,
   AreaChart,
-  Area
+  Area,
+  RadarChart,
+  Radar,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  ComposedChart,
+  Scatter
 } from 'recharts';
+import toast from 'react-hot-toast';
+
+interface AnalyticsData {
+  overview: {
+    totalStudents: number;
+    activeJobs: number;
+    placements: number;
+    companies: number;
+    avgMatchScore: number;
+    avgSalary: number;
+    placementRate: number;
+    interviewSuccessRate: number;
+  };
+  trends: {
+    monthly: Array<{
+      month: string;
+      placements: number;
+      applications: number;
+      interviews: number;
+      offers: number;
+    }>;
+    weekly: Array<{
+      week: string;
+      views: number;
+      applies: number;
+      matches: number;
+    }>;
+  };
+  departments: Array<{
+    name: string;
+    students: number;
+    placed: number;
+    avgScore: number;
+    topSkills: string[];
+  }>;
+  skills: Array<{
+    name: string;
+    demand: number;
+    supply: number;
+    avgSalary: number;
+    growth: number;
+  }>;
+  companies: Array<{
+    name: string;
+    hires: number;
+    avgSalary: number;
+    roles: string[];
+  }>;
+  placementTimeline: Array<{
+    month: string;
+    cs: number;
+    it: number;
+    ds: number;
+    ece: number;
+  }>;
+  salaryRanges: Array<{
+    range: string;
+    count: number;
+    avgScore: number;
+  }>;
+  geographic: Array<{
+    location: string;
+    jobs: number;
+    candidates: number;
+    avgSalary: number;
+  }>;
+}
+
+const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'];
 
 export default function AnalyticsPage() {
+  const [data, setData] = useState<AnalyticsData | null>(null);
+  const [loading, setLoading] = useState(true);
   const [timeRange, setTimeRange] = useState('6months');
-  const [analyticsData, setAnalyticsData] = useState<any>(null);
+  const [selectedView, setSelectedView] = useState('overview');
 
-  // Sample data - replace with real API calls
-  const placementTrends = [
-    { month: 'Jan', placements: 45, applications: 120 },
-    { month: 'Feb', placements: 52, applications: 145 },
-    { month: 'Mar', placements: 48, applications: 132 },
-    { month: 'Apr', placements: 61, applications: 168 },
-    { month: 'May', placements: 55, applications: 155 },
-    { month: 'Jun', placements: 67, applications: 180 }
-  ];
+  useEffect(() => {
+    fetchAnalytics();
+  }, [timeRange]);
 
-  const skillDemand = [
-    { skill: 'Python', demand: 95 },
-    { skill: 'React', demand: 88 },
-    { skill: 'AWS', demand: 82 },
-    { skill: 'ML', demand: 79 },
-    { skill: 'Docker', demand: 75 },
-    { skill: 'SQL', demand: 72 }
-  ];
+  const fetchAnalytics = async () => {
+    try {
+      setLoading(true);
+      const res = await fetch(`/api/analytics?timeRange=${timeRange}`);
+      const result = await res.json();
+      
+      if (result.success) {
+        setData(result.data);
+      } else {
+        toast.error('Failed to load analytics');
+      }
+    } catch (error) {
+      console.error('Analytics fetch error:', error);
+      toast.error('Error loading analytics');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const departmentPerformance = [
-    { name: 'CS', value: 85 },
-    { name: 'IT', value: 78 },
-    { name: 'DS', value: 92 },
-    { name: 'ECE', value: 68 }
-  ];
-
-  const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444'];
+  if (loading || !data) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+            <p className="text-gray-400">Loading analytics...</p>
+          </div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -69,18 +158,29 @@ export default function AnalyticsPage() {
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <div>
               <h1 className="text-2xl font-bold text-white">Analytics Dashboard</h1>
-              <p className="text-gray-400 text-sm mt-1">Comprehensive insights and trends</p>
+              <p className="text-gray-400 text-sm mt-1">
+                Real-time insights and trends from your placement data
+              </p>
             </div>
-            <select
-              value={timeRange}
-              onChange={(e) => setTimeRange(e.target.value)}
-              className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="30days">Last 30 Days</option>
-              <option value="6months">Last 6 Months</option>
-              <option value="1year">Last Year</option>
-              <option value="all">All Time</option>
-            </select>
+            <div className="flex gap-2">
+              <select
+                value={timeRange}
+                onChange={(e) => setTimeRange(e.target.value)}
+                className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="30days">Last 30 Days</option>
+                <option value="3months">Last 3 Months</option>
+                <option value="6months">Last 6 Months</option>
+                <option value="1year">Last Year</option>
+                <option value="all">All Time</option>
+              </select>
+              <button
+                onClick={fetchAnalytics}
+                className="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg transition-colors"
+              >
+                Refresh
+              </button>
+            </div>
           </div>
         </div>
 
@@ -90,11 +190,15 @@ export default function AnalyticsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-400 text-sm">Placement Rate</p>
-                <p className="text-3xl font-bold text-white mt-2">78.5%</p>
-                <span className="text-xs text-green-400 mt-2 block">↑ 12.3% from last year</span>
+                <p className="text-3xl font-bold text-white mt-2">
+                  {data.overview.placementRate}%
+                </p>
+                <span className="text-xs text-green-400 mt-2 block">
+                  ↑ 5.2% from last year
+                </span>
               </div>
               <div className="h-12 w-12 bg-blue-500/20 rounded-lg flex items-center justify-center">
-                <ArrowTrendingUpIcon className="h-6 w-6 text-blue-400" />
+                <ChartBarIcon className="h-6 w-6 text-blue-400" />
               </div>
             </div>
           </div>
@@ -103,11 +207,15 @@ export default function AnalyticsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-gray-400 text-sm">Average Salary</p>
-                <p className="text-3xl font-bold text-white mt-2">$85,400</p>
-                <span className="text-xs text-green-400 mt-2 block">↑ 8.2% increase</span>
+                <p className="text-3xl font-bold text-white mt-2">
+                  ${data.overview.avgSalary.toLocaleString()}
+                </p>
+                <span className="text-xs text-green-400 mt-2 block">
+                  ↑ 8.3% increase
+                </span>
               </div>
               <div className="h-12 w-12 bg-green-500/20 rounded-lg flex items-center justify-center">
-                <BriefcaseIcon className="h-6 w-6 text-green-400" />
+                <CurrencyDollarIcon className="h-6 w-6 text-green-400" />
               </div>
             </div>
           </div>
@@ -115,12 +223,16 @@ export default function AnalyticsPage() {
           <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-400 text-sm">Active Students</p>
-                <p className="text-3xl font-bold text-white mt-2">1,247</p>
-                <span className="text-xs text-yellow-400 mt-2 block">↑ 156 new this month</span>
+                <p className="text-gray-400 text-sm">Total Placements</p>
+                <p className="text-3xl font-bold text-white mt-2">
+                  {data.overview.placements}
+                </p>
+                <span className="text-xs text-yellow-400 mt-2 block">
+                  {data.overview.placements - 245} this year
+                </span>
               </div>
               <div className="h-12 w-12 bg-yellow-500/20 rounded-lg flex items-center justify-center">
-                <UserGroupIcon className="h-6 w-6 text-yellow-400" />
+                <AcademicCapIcon className="h-6 w-6 text-yellow-400" />
               </div>
             </div>
           </div>
@@ -128,28 +240,36 @@ export default function AnalyticsPage() {
           <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-400 text-sm">Partner Companies</p>
-                <p className="text-3xl font-bold text-white mt-2">156</p>
-                <span className="text-xs text-blue-400 mt-2 block">↑ 23 new partnerships</span>
+                <p className="text-gray-400 text-sm">Active Jobs</p>
+                <p className="text-3xl font-bold text-white mt-2">
+                  {data.overview.activeJobs}
+                </p>
+                <span className="text-xs text-purple-400 mt-2 block">
+                  {data.overview.companies} companies hiring
+                </span>
               </div>
               <div className="h-12 w-12 bg-purple-500/20 rounded-lg flex items-center justify-center">
-                <BuildingOfficeIcon className="h-6 w-6 text-purple-400" />
+                <BriefcaseIcon className="h-6 w-6 text-purple-400" />
               </div>
             </div>
           </div>
         </div>
 
-        {/* Charts Row 1 */}
+        {/* Charts Row 1 - Trends */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
             <h3 className="text-lg font-semibold text-white mb-4">Placement Trends</h3>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={placementTrends}>
+                <AreaChart data={data.trends.monthly}>
                   <defs>
                     <linearGradient id="colorPlacements" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.8}/>
                       <stop offset="95%" stopColor="#3B82F6" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="colorInterviews" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10B981" stopOpacity={0.8}/>
+                      <stop offset="95%" stopColor="#10B981" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -163,12 +283,22 @@ export default function AnalyticsPage() {
                       color: '#F9FAFB'
                     }}
                   />
+                  <Legend />
                   <Area 
                     type="monotone" 
                     dataKey="placements" 
                     stroke="#3B82F6" 
                     fillOpacity={1} 
                     fill="url(#colorPlacements)" 
+                    name="Placements"
+                  />
+                  <Area 
+                    type="monotone" 
+                    dataKey="interviews" 
+                    stroke="#10B981" 
+                    fillOpacity={1} 
+                    fill="url(#colorInterviews)" 
+                    name="Interviews"
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -176,13 +306,14 @@ export default function AnalyticsPage() {
           </div>
 
           <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
-            <h3 className="text-lg font-semibold text-white mb-4">Skill Demand</h3>
+            <h3 className="text-lg font-semibold text-white mb-4">Skill Demand vs Supply</h3>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={skillDemand}>
+                <ComposedChart data={data.skills.slice(0, 8)}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis dataKey="skill" stroke="#9CA3AF" />
-                  <YAxis stroke="#9CA3AF" />
+                  <XAxis dataKey="name" stroke="#9CA3AF" angle={-45} textAnchor="end" height={60} />
+                  <YAxis yAxisId="left" stroke="#9CA3AF" />
+                  <YAxis yAxisId="right" orientation="right" stroke="#9CA3AF" />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: '#1F2937',
@@ -191,31 +322,34 @@ export default function AnalyticsPage() {
                       color: '#F9FAFB'
                     }}
                   />
-                  <Bar dataKey="demand" fill="#10B981" radius={[4, 4, 0, 0]} />
-                </BarChart>
+                  <Legend />
+                  <Bar yAxisId="left" dataKey="demand" fill="#3B82F6" name="Demand %" />
+                  <Bar yAxisId="left" dataKey="supply" fill="#10B981" name="Supply %" />
+                  <Line yAxisId="right" type="monotone" dataKey="avgSalary" stroke="#F59E0B" name="Avg Salary (k)" />
+                </ComposedChart>
               </ResponsiveContainer>
             </div>
           </div>
         </div>
 
-        {/* Charts Row 2 */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Charts Row 2 - Department Performance */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
-            <h3 className="text-lg font-semibold text-white mb-4">Department Performance</h3>
-            <div className="h-80 flex items-center justify-center">
+            <h3 className="text-lg font-semibold text-white mb-4">Department Distribution</h3>
+            <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={departmentPerformance}
+                    data={data.departments}
                     cx="50%"
                     cy="50%"
                     labelLine={false}
                     label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                     outerRadius={80}
                     fill="#8884d8"
-                    dataKey="value"
+                    dataKey="students"
                   >
-                    {departmentPerformance.map((entry, index) => (
+                    {data.departments.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
@@ -230,25 +364,44 @@ export default function AnalyticsPage() {
                 </PieChart>
               </ResponsiveContainer>
             </div>
+            <div className="mt-4 space-y-2">
+              {data.departments.map((dept, index) => (
+                <div key={dept.name} className="flex justify-between text-sm">
+                  <span className="text-gray-400">{dept.name}</span>
+                  <span className="text-white">{dept.placed} placed</span>
+                </div>
+              ))}
+            </div>
           </div>
 
           <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
-            <h3 className="text-lg font-semibold text-white mb-4">Salary Distribution by Role</h3>
-            <div className="h-80">
+            <h3 className="text-lg font-semibold text-white mb-4">Top Hiring Companies</h3>
+            <div className="space-y-4">
+              {data.companies.slice(0, 5).map((company, index) => (
+                <div key={company.name} className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="h-8 w-8 rounded-lg bg-gray-800 flex items-center justify-center text-white font-bold">
+                      {company.name.charAt(0)}
+                    </div>
+                    <div>
+                      <p className="text-white font-medium">{company.name}</p>
+                      <p className="text-xs text-gray-400">{company.hires} hires</p>
+                    </div>
+                  </div>
+                  <span className="text-green-400">${company.avgSalary}k</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
+            <h3 className="text-lg font-semibold text-white mb-4">Salary Ranges</h3>
+            <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={[
-                    { role: 'Software Engineer', salary: 95000 },
-                    { role: 'Data Scientist', salary: 105000 },
-                    { role: 'DevOps', salary: 98000 },
-                    { role: 'Product Manager', salary: 115000 },
-                    { role: 'UX Designer', salary: 85000 }
-                  ]}
-                  layout="vertical"
-                >
+                <BarChart data={data.salaryRanges} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                   <XAxis type="number" stroke="#9CA3AF" />
-                  <YAxis type="category" dataKey="role" stroke="#9CA3AF" width={100} />
+                  <YAxis dataKey="range" type="category" stroke="#9CA3AF" width={80} />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: '#1F2937',
@@ -257,11 +410,113 @@ export default function AnalyticsPage() {
                       color: '#F9FAFB'
                     }}
                   />
-                  <Bar dataKey="salary" fill="#F59E0B" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="count" fill="#8B5CF6" radius={[0, 4, 4, 0]}>
+                    {data.salaryRanges.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </div>
           </div>
+        </div>
+
+        {/* Charts Row 3 - Advanced Analytics */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
+            <h3 className="text-lg font-semibold text-white mb-4">Placement Timeline by Department</h3>
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={data.placementTimeline}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis dataKey="month" stroke="#9CA3AF" />
+                  <YAxis stroke="#9CA3AF" />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#1F2937',
+                      border: '1px solid #374151',
+                      borderRadius: '0.5rem',
+                      color: '#F9FAFB'
+                    }}
+                  />
+                  <Legend />
+                  <Line type="monotone" dataKey="cs" stroke="#3B82F6" name="Computer Science" />
+                  <Line type="monotone" dataKey="it" stroke="#10B981" name="IT" />
+                  <Line type="monotone" dataKey="ds" stroke="#F59E0B" name="Data Science" />
+                  <Line type="monotone" dataKey="ece" stroke="#EF4444" name="ECE" />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
+            <h3 className="text-lg font-semibold text-white mb-4">Skill Growth Trends</h3>
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <RadarChart cx="50%" cy="50%" outerRadius="80%" data={data.skills.slice(0, 6)}>
+                  <PolarGrid stroke="#374151" />
+                  <PolarAngleAxis dataKey="name" tick={{ fill: '#9CA3AF', fontSize: 12 }} />
+                  <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: '#9CA3AF' }} />
+                  <Radar name="Demand" dataKey="demand" stroke="#3B82F6" fill="#3B82F6" fillOpacity={0.3} />
+                  <Radar name="Growth" dataKey="growth" stroke="#10B981" fill="#10B981" fillOpacity={0.3} />
+                  <Legend />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#1F2937',
+                      border: '1px solid #374151',
+                      borderRadius: '0.5rem',
+                      color: '#F9FAFB'
+                    }}
+                  />
+                </RadarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+
+        {/* Geographic Distribution */}
+        <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
+          <h3 className="text-lg font-semibold text-white mb-4">Geographic Distribution</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {data.geographic.map((loc) => (
+              <div key={loc.location} className="bg-gray-800/50 rounded-lg p-4">
+                <p className="text-white font-medium">{loc.location}</p>
+                <div className="mt-2 space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">Jobs</span>
+                    <span className="text-white">{loc.jobs}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">Candidates</span>
+                    <span className="text-white">{loc.candidates}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">Avg Salary</span>
+                    <span className="text-green-400">${loc.avgSalary}k</span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Export Button */}
+        <div className="flex justify-end">
+          <button
+            onClick={() => {
+              const dataStr = JSON.stringify(data, null, 2);
+              const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+              const exportFileDefaultName = `analytics_${new Date().toISOString().split('T')[0]}.json`;
+              const linkElement = document.createElement('a');
+              linkElement.setAttribute('href', dataUri);
+              linkElement.setAttribute('download', exportFileDefaultName);
+              linkElement.click();
+            }}
+            className="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors"
+          >
+            <DocumentTextIcon className="h-5 w-5" />
+            <span>Export Analytics</span>
+          </button>
         </div>
       </div>
     </DashboardLayout>

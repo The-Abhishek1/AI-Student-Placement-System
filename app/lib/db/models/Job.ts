@@ -20,7 +20,7 @@ export interface IJob extends mongoose.Document {
   source: 'linkedin' | 'indeed' | 'manual';
   url?: string;
   active: boolean;
-  applicants: mongoose.Types.ObjectId[];
+  applicants: mongoose.Types.ObjectId[]; // Array of student IDs
   matchCount: number;
   createdAt: Date;
   updatedAt: Date;
@@ -29,24 +29,32 @@ export interface IJob extends mongoose.Document {
 const JobSchema = new mongoose.Schema({
   title: { type: String, required: true },
   company: { type: String, required: true },
-  location: { type: String, required: true },
+  location: { type: String, required: true, default: 'Remote' },
   remote: { type: Boolean, default: false },
   salary: {
-    min: { type: Number, required: true },
-    max: { type: Number, required: true },
+    min: { type: Number, default: 0 },
+    max: { type: Number, default: 0 },
     currency: { type: String, default: 'USD' }
   },
   description: { type: String, required: true },
-  requirements: [String],
-  skills: [String],
-  type: { type: String, enum: ['fulltime', 'parttime', 'internship', 'contract'], required: true },
+  requirements: [{ type: String }],
+  skills: [{ type: String }],
+  type: { 
+    type: String, 
+    enum: ['fulltime', 'parttime', 'internship', 'contract'], 
+    default: 'fulltime' 
+  },
   postedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   postedDate: { type: Date, default: Date.now },
   deadline: Date,
-  source: { type: String, enum: ['linkedin', 'indeed', 'manual'], default: 'manual' },
+  source: { 
+    type: String, 
+    enum: ['linkedin', 'indeed', 'manual'], 
+    default: 'manual' 
+  },
   url: String,
   active: { type: Boolean, default: true },
-  applicants: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Student' }],
+  applicants: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Student' }], // Empty array by default
   matchCount: { type: Number, default: 0 }
 }, {
   timestamps: true

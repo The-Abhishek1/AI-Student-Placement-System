@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useState } from 'react';
+import { Fragment, useState, useEffect } from 'react';
 import { Dialog, Transition } from '@headlessui/react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { useSession } from 'next-auth/react';
@@ -24,12 +24,28 @@ export default function AddStudentModal({ isOpen, onClose, onStudentAdded }: Add
     status: 'active'
   });
 
+  // Check session status when modal opens
+  useEffect(() => {
+    if (isOpen && status === 'unauthenticated') {
+      toast.error('Please login first');
+      onClose();
+      window.location.href = '/login';
+    }
+  }, [isOpen, status, onClose]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     // Check if user is authenticated
     if (status !== 'authenticated') {
       toast.error('Please login first');
+      window.location.href = '/login';
+      return;
+    }
+
+    if (!session?.user?.id) {
+      toast.error('Session invalid. Please login again.');
+      window.location.href = '/login';
       return;
     }
 
@@ -50,18 +66,26 @@ export default function AddStudentModal({ isOpen, onClose, onStudentAdded }: Add
       };
 
       console.log('Submitting student data:', studentData);
+      console.log('Session user:', session.user);
 
       const res = await fetch('/api/students', {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
         },
-        credentials: 'include', // Important: include cookies
+        credentials: 'include',
         body: JSON.stringify(studentData)
       });
 
       const data = await res.json();
-      console.log('Response:', data);
+      console.log('Response status:', res.status);
+      console.log('Response data:', data);
+
+      if (res.status === 401) {
+        toast.error('Session expired. Please login again.');
+        window.location.href = '/login';
+        return;
+      }
 
       if (data.success) {
         toast.success('Student added successfully!');
@@ -80,6 +104,8 @@ export default function AddStudentModal({ isOpen, onClose, onStudentAdded }: Add
         toast.error(data.error || 'Failed to add student');
         if (data.details) {
           console.error('Validation details:', data.details);
+          // Show validation errors
+          data.details.forEach((detail: string) => toast.error(detail));
         }
       }
     } catch (error) {
@@ -156,154 +182,158 @@ export default function AddStudentModal({ isOpen, onClose, onStudentAdded }: Add
                       Add New Student
                     </Dialog.Title>
 
-                    <form onSubmit={handleSubmit} className="space-y-4">
-                      {/* Basic Info */}
-                      <div>
-                        <label className="block text-sm text-gray-400 mb-1">
-                          Full Name <span className="text-red-400">*</span>
-                        </label>
-                        <input
-                          type="text"
-                          required
-                          value={formData.name}
-                          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          placeholder="Enter full name"
-                        />
+                    {status === 'loading' && (
+                      <div className="text-center py-4">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto"></div>
+                        <p className="text-gray-400 mt-2">Checking session...</p>
                       </div>
+                    )}
 
-                      <div>
-                        <label className="block text-sm text-gray-400 mb-1">
-                          Email <span className="text-red-400">*</span>
-                        </label>
-                        <input
-                          type="email"
-                          required
-                          value={formData.email}
-                          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          placeholder="student@example.com"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
+                    {status === 'authenticated' && (
+                      <form onSubmit={handleSubmit} className="space-y-4">
+                        {/* Your existing form fields */}
                         <div>
                           <label className="block text-sm text-gray-400 mb-1">
-                            Department <span className="text-red-400">*</span>
+                            Full Name <span className="text-red-400">*</span>
                           </label>
                           <input
                             type="text"
                             required
-                            value={formData.department}
-                            onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                            value={formData.name}
+                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                             className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            placeholder="e.g., Computer Science"
+                            placeholder="Enter full name"
                           />
                         </div>
+
                         <div>
-                          <label className="block text-sm text-gray-400 mb-1">Graduation Year</label>
+                          <label className="block text-sm text-gray-400 mb-1">
+                            Email <span className="text-red-400">*</span>
+                          </label>
                           <input
-                            type="number"
-                            value={formData.graduationYear}
-                            onChange={(e) => setFormData({ ...formData, graduationYear: parseInt(e.target.value) })}
+                            type="email"
+                            required
+                            value={formData.email}
+                            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                             className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            min="2000"
-                            max="2030"
+                            placeholder="student@example.com"
                           />
                         </div>
-                      </div>
 
-                      <div>
-                        <label className="block text-sm text-gray-400 mb-1">Status</label>
-                        <select
-                          value={formData.status}
-                          onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
-                          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        >
-                          <option value="active">Active</option>
-                          <option value="training">Training</option>
-                          <option value="placed">Placed</option>
-                        </select>
-                      </div>
-
-                      {/* Skills */}
-                      <div>
-                        <label className="block text-sm text-gray-400 mb-2">Skills</label>
-                        {formData.skills.map((skill, index) => (
-                          <div key={index} className="bg-gray-800/50 rounded-lg p-3 mb-3">
-                            <div className="grid grid-cols-2 gap-2 mb-2">
-                              <input
-                                type="text"
-                                placeholder="Skill name (e.g., Python)"
-                                value={skill.name}
-                                onChange={(e) => updateSkill(index, 'name', e.target.value)}
-                                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                              />
-                              <select
-                                value={skill.level}
-                                onChange={(e) => updateSkill(index, 'level', e.target.value)}
-                                className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                              >
-                                <option value="beginner">Beginner</option>
-                                <option value="intermediate">Intermediate</option>
-                                <option value="advanced">Advanced</option>
-                                <option value="expert">Expert</option>
-                              </select>
-                            </div>
-                            <div className="flex gap-2">
-                              <input
-                                type="number"
-                                placeholder="Years of experience"
-                                value={skill.yearsOfExperience}
-                                onChange={(e) => updateSkill(index, 'yearsOfExperience', parseInt(e.target.value) || 0)}
-                                className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                min="0"
-                                max="50"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => removeSkill(index)}
-                                className="px-3 py-2 bg-red-600/20 text-red-400 rounded-lg hover:bg-red-600/30 text-sm transition-colors"
-                                disabled={formData.skills.length === 1}
-                              >
-                                Remove
-                              </button>
-                            </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm text-gray-400 mb-1">
+                              Department <span className="text-red-400">*</span>
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={formData.department}
+                              onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              placeholder="e.g., Computer Science"
+                            />
                           </div>
-                        ))}
-                        <button
-                          type="button"
-                          onClick={addSkill}
-                          className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
-                        >
-                          + Add Skill
-                        </button>
-                      </div>
+                          <div>
+                            <label className="block text-sm text-gray-400 mb-1">Graduation Year</label>
+                            <input
+                              type="number"
+                              value={formData.graduationYear}
+                              onChange={(e) => setFormData({ ...formData, graduationYear: parseInt(e.target.value) })}
+                              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              min="2000"
+                              max="2030"
+                            />
+                          </div>
+                        </div>
 
-                      {/* Error message area */}
-                      {loading && (
-                        <div className="text-sm text-blue-400">Adding student...</div>
-                      )}
+                        <div>
+                          <label className="block text-sm text-gray-400 mb-1">Status</label>
+                          <select
+                            value={formData.status}
+                            onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                            className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          >
+                            <option value="active">Active</option>
+                            <option value="training">Training</option>
+                            <option value="placed">Placed</option>
+                          </select>
+                        </div>
 
-                      {/* Submit Buttons */}
-                      <div className="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse gap-3">
-                        <button
-                          type="submit"
-                          disabled={loading}
-                          className="inline-flex w-full justify-center rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        >
-                          {loading ? 'Adding...' : 'Add Student'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={onClose}
-                          disabled={loading}
-                          className="mt-3 inline-flex w-full justify-center rounded-lg bg-gray-800 px-3 py-2 text-sm font-semibold text-white shadow-sm ring-1 ring-inset ring-gray-700 hover:bg-gray-700 sm:mt-0 sm:w-auto disabled:opacity-50 transition-colors"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </form>
+                        {/* Skills section */}
+                        <div>
+                          <label className="block text-sm text-gray-400 mb-2">Skills</label>
+                          {formData.skills.map((skill, index) => (
+                            <div key={index} className="bg-gray-800/50 rounded-lg p-3 mb-3">
+                              <div className="grid grid-cols-2 gap-2 mb-2">
+                                <input
+                                  type="text"
+                                  placeholder="Skill name (e.g., Python)"
+                                  value={skill.name}
+                                  onChange={(e) => updateSkill(index, 'name', e.target.value)}
+                                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                                <select
+                                  value={skill.level}
+                                  onChange={(e) => updateSkill(index, 'level', e.target.value)}
+                                  className="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                >
+                                  <option value="beginner">Beginner</option>
+                                  <option value="intermediate">Intermediate</option>
+                                  <option value="advanced">Advanced</option>
+                                  <option value="expert">Expert</option>
+                                </select>
+                              </div>
+                              <div className="flex gap-2">
+                                <input
+                                  type="number"
+                                  placeholder="Years of experience"
+                                  value={skill.yearsOfExperience}
+                                  onChange={(e) => updateSkill(index, 'yearsOfExperience', parseInt(e.target.value) || 0)}
+                                  className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  min="0"
+                                  max="50"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => removeSkill(index)}
+                                  className="px-3 py-2 bg-red-600/20 text-red-400 rounded-lg hover:bg-red-600/30 text-sm transition-colors"
+                                  disabled={formData.skills.length === 1}
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={addSkill}
+                            className="text-sm text-blue-400 hover:text-blue-300 transition-colors"
+                          >
+                            + Add Skill
+                          </button>
+                        </div>
+
+                        {/* Submit Buttons */}
+                        <div className="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse gap-3">
+                          <button
+                            type="submit"
+                            disabled={loading}
+                            className="inline-flex w-full justify-center rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-700 sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                          >
+                            {loading ? 'Adding...' : 'Add Student'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={onClose}
+                            disabled={loading}
+                            className="mt-3 inline-flex w-full justify-center rounded-lg bg-gray-800 px-3 py-2 text-sm font-semibold text-white shadow-sm ring-1 ring-inset ring-gray-700 hover:bg-gray-700 sm:mt-0 sm:w-auto disabled:opacity-50 transition-colors"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </form>
+                    )}
                   </div>
                 </div>
               </Dialog.Panel>

@@ -4,7 +4,7 @@ import connectDB from '@/app/lib/db/mongodb';
 import User from '@/app/lib/db/models/User';
 import bcrypt from 'bcryptjs';
 
-const handler = NextAuth({
+export const authOptions = {
   providers: [
     CredentialsProvider({
       name: 'credentials',
@@ -60,13 +60,25 @@ const handler = NextAuth({
   },
   pages: {
     signIn: '/login',
-    error: '/login'
   },
   session: {
     strategy: 'jwt',
-    maxAge: 30 * 24 * 60 * 60 // 30 days
+    maxAge: 30 * 24 * 60 * 60, // 30 days
   },
-  secret: process.env.NEXTAUTH_SECRET
-});
+  cookies: {
+    sessionToken: {
+      name: `next-auth.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: process.env.NODE_ENV === 'production',
+      },
+    },
+  },
+  secret: process.env.NEXTAUTH_SECRET,
+  debug: process.env.NODE_ENV === 'development',
+};
 
+const handler = NextAuth(authOptions);
 export { handler as GET, handler as POST };
